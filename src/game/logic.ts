@@ -3,8 +3,10 @@ import type {
   Bullet,
   Circle,
   InputState,
+  ItemDrop,
   Player,
   Vec,
+  WeaponKind,
   Zombie,
   ZombieKind,
 } from "./types";
@@ -122,15 +124,109 @@ export function movePlayerToward(
   };
 }
 
-/** Create a bullet travelling straight up from the player's gun muzzle. */
+export interface WeaponSpec {
+  name: string;
+  /** Seconds between shots. */
+  cooldown: number;
+  bulletSpeed: number;
+  damage: number;
+  /** Bullets created per shot (shotgun blast). */
+  pellets: number;
+  /** Total spread cone in radians across all pellets (or jitter for one). */
+  spread: number;
+  /** How many additional zombies a bullet can pass through after a hit. */
+  pierce: number;
+  /** Shots granted when the weapon is picked up; Infinity for the pistol. */
+  ammo: number;
+  bulletRadius: number;
+}
+
+export const WEAPONS: Record<WeaponKind, WeaponSpec> = {
+  pistol: {
+    name: "PISTOL",
+    cooldown: 0.16,
+    bulletSpeed: 700,
+    damage: 1,
+    pellets: 1,
+    spread: 0,
+    pierce: 0,
+    ammo: Infinity,
+    bulletRadius: 4,
+  },
+  shotgun: {
+    name: "SHOTGUN",
+    cooldown: 0.5,
+    bulletSpeed: 620,
+    damage: 1,
+    pellets: 5,
+    spread: 0.42,
+    pierce: 0,
+    ammo: 14,
+    bulletRadius: 3,
+  },
+  smg: {
+    name: "SMG",
+    cooldown: 0.07,
+    bulletSpeed: 780,
+    damage: 1,
+    pellets: 1,
+    spread: 0.1,
+    pierce: 0,
+    ammo: 60,
+    bulletRadius: 3,
+  },
+  rifle: {
+    name: "RAIL RIFLE",
+    cooldown: 0.45,
+    bulletSpeed: 980,
+    damage: 2,
+    pellets: 1,
+    spread: 0,
+    pierce: 3,
+    ammo: 15,
+    bulletRadius: 5,
+  },
+};
+
+/**
+ * Create the bullets for one shot of the given weapon, travelling up-range
+ * from the player's gun muzzle. Multi-pellet weapons fan their pellets evenly
+ * across the spread cone; single-pellet weapons with spread get rng jitter.
+ */
+export function fireBullets(
+  player: Player,
+  weapon: WeaponKind,
+  rng: () => number = Math.random,
+): Bullet[] {
+  const spec = WEAPONS[weapon];
+  const bullets: Bullet[] = [];
+  for (let i = 0; i < spec.pellets; i++) {
+    const offset =
+      spec.pellets > 1
+        ? -spec.spread / 2 + (spec.spread * i) / (spec.pellets - 1)
+        : spec.spread > 0
+          ? (rng() - 0.5) * spec.spread
+          : 0;
+    const angle = -Math.PI / 2 + offset;
+    bullets.push({
+      x: player.x,
+      y: player.y - player.radius - 6,
+      radius: spec.bulletRadius,
+      // Snap zero-offset shots exactly vertical (cos(-π/2) has fp epsilon).
+      vx: offset === 0 ? 0 : Math.cos(angle) * spec.bulletSpeed,
+      vy: offset === 0 ? -spec.bulletSpeed : Math.sin(angle) * spec.bulletSpeed,
+      damage: spec.damage,
+      pierce: spec.pierce,
+      hitIds: [],
+      weapon,
+    });
+  }
+  return bullets;
+}
+
+/** Create a default pistol bullet travelling straight up (convenience). */
 export function fireBullet(player: Player): Bullet {
-  return {
-    x: player.x,
-    y: player.y - player.radius - 6,
-    radius: BULLET_RADIUS,
-    vx: 0,
-    vy: -BULLET_SPEED,
-  };
+  return fireBullets(player, "pistol")[0];
 }
 
 export function stepBullet(bullet: Bullet, dt: number): Bullet {
@@ -197,12 +293,14 @@ export function makeZombie(
   bounds: Bounds,
   wave: number,
   rng: () => number = Math.random,
+  id = 0,
 ): Zombie {
   const kind = zombieKindForWave(wave, rng);
   const stats = ZOMBIE_STATS[kind];
   const pos = spawnPosition(bounds, rng);
   return {
     ...pos,
+    id,
     kind,
     radius: stats.radius,
     speed: zombieSpeedForWave(wave) * stats.speedMul,
@@ -210,4 +308,40 @@ export function makeZombie(
     maxHp: stats.hp,
     phase: rng() * Math.PI * 2,
   };
+}
+
+// ------------------------------------------------------------- item drops
+
+export const ITEM_RADIUS = 13;
+export const ITEM_FALL_SPEED = 90;
+
+export const ITEM_WEAPONS: ItemDrop["weapon"][] = ["shotgun", "smg", "rifle"];
+
+/**
+ * Create a weapon crate that falls from above the top edge for the player to
+ * catch in the bottom zone. `rng` injectable for deterministic tests.
+ */
+export function makeItemDrop(
+  bounds: Bounds,
+  rng: () => number = Math.random,
+): ItemDrop {
+  const margin = ITEM_RADIUS * 3;
+  const weapon =
+    ITEM_WEAPONS[Math.min(ITEM_WEAPONS.length - 1, Math.floor(rng() * ITEM_WEAPONS.length))];
+  return {
+    x: margin + rng() * (bounds.width - margin * 2),
+    y: -ITEM_RADIUS,
+    radius: ITEM_RADIUS,
+    weapon,
+    vy: ITEM_FALL_SPEED,
+  };
+}
+
+export function stepItem(item: ItemDrop, dt: number): ItemDrop {
+  return { ...item, y: item.y + item.vy * dt };
+}
+
+/** Items despawn once they fall past the bottom edge. */
+export function itemInBounds(item: ItemDrop, bounds: Bounds): boolean {
+  return item.y <= bounds.height + item.radius;
 }

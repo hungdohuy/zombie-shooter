@@ -1,18 +1,32 @@
 import {
   bulletInBounds,
   circlesCollide,
-  fireBullet,
+  fireBullets,
+  itemInBounds,
+  makeItemDrop,
   makeZombie,
   movePlayer,
   movePlayerToward,
   PLAYER_RADIUS,
   playerZoneTop,
   stepBullet,
+  stepItem,
   stepZombie,
+  WEAPONS,
   ZOMBIE_STATS,
 } from "./logic";
+import { SoundManager } from "./audio";
 import { createInputState } from "./types";
-import type { Bounds, Bullet, InputState, Player, Vec, Zombie } from "./types";
+import type {
+  Bounds,
+  Bullet,
+  InputState,
+  ItemDrop,
+  Player,
+  Vec,
+  WeaponKind,
+  Zombie,
+} from "./types";
 
 const KEY_MAP: Record<string, keyof InputState> = {
   ArrowUp: "up",
@@ -31,13 +45,17 @@ export interface HudElements {
   wave: HTMLElement;
   hp: HTMLElement;
   hpFill: HTMLElement;
+  weapon: HTMLElement;
+  ammo: HTMLElement;
   overlay: HTMLElement;
   overlayTitle: HTMLElement;
   overlayText: HTMLElement;
 }
 
-const FIRE_COOLDOWN = 0.16; // seconds between shots
 const SPAWN_INTERVAL_BASE = 1.6;
+const ITEM_FIRST_DROP = 7; // seconds until the first weapon crate falls
+const ITEM_DROP_INTERVAL = 10; // base seconds between crates (+ jitter)
+const HURT_SOUND_COOLDOWN = 0.35; // contact damage is continuous; rate-limit
 export const CONTACT_DPS = 20; // baseline; per-kind dps lives in ZOMBIE_STATS
 const START_GRACE = 1.2; // seconds before the first zombie spawns
 
@@ -77,6 +95,16 @@ const ZOMBIE_SKINS: Record<
   brute: { body: "#38641f", head: "#456f27", eye: "#ff4040" },
 };
 
+const BULLET_STYLES: Record<
+  WeaponKind,
+  { core: string; trail: string; label: string; crate: string }
+> = {
+  pistol: { core: "#fffbe0", trail: "245, 243, 107", label: "P", crate: "#f5f36b" },
+  shotgun: { core: "#ffe0b8", trail: "255, 150, 60", label: "S", crate: "#ff963c" },
+  smg: { core: "#d8f8ff", trail: "80, 210, 255", label: "M", crate: "#50d2ff" },
+  rifle: { core: "#f2e0ff", trail: "190, 110, 255", label: "R", crate: "#be6eff" },
+};
+
 export class Game {
   private ctx: CanvasRenderingContext2D;
   private bounds: Bounds;
@@ -84,14 +112,21 @@ export class Game {
   private player!: Player;
   private zombies: Zombie[] = [];
   private bullets: Bullet[] = [];
+  private items: ItemDrop[] = [];
   private particles: Particle[] = [];
   private floaters: Floater[] = [];
   private gravestones: Gravestone[] = [];
+  private sounds = new SoundManager();
   private score = 0;
   private wave = 1;
   private kills = 0;
   private spawnTimer = 0;
   private fireTimer = 0;
+  private itemTimer = 0;
+  private weapon: WeaponKind = "pistol";
+  private ammo = Infinity;
+  private zombieSeq = 0;
+  private hurtSoundTimer = 0;
   private running = false;
   private lastTime = 0;
   private rafId = 0;
@@ -186,6 +221,7 @@ export class Game {
     };
     this.zombies = [];
     this.bullets = [];
+    this.items = [];
     this.particles = [];
     this.floaters = [];
     this.score = 0;
@@ -193,6 +229,10 @@ export class Game {
     this.kills = 0;
     this.spawnTimer = START_GRACE;
     this.fireTimer = 0;
+    this.itemTimer = ITEM_FIRST_DROP;
+    this.weapon = "pistol";
+    this.ammo = Infinity;
+    this.hurtSoundTimer = 0;
     this.elapsed = 0;
     this.muzzleFlash = 0;
     this.recoil = 0;
@@ -204,7 +244,15 @@ export class Game {
     this.updateHud();
   }
 
+  /** Toggle all game audio; returns the new muted state. */
+  toggleSound(): boolean {
+    return this.sounds.toggleMuted();
+  }
+
   start(): void {
+    // START is a user gesture, which is the only moment browsers allow an
+    // AudioContext to be created/resumed.
+    this.sounds.unlock();
     // Invalidate any loop already scheduled so a second START press can't
     // stack a second animation loop (which would double spawns and damage).
     cancelAnimationFrame(this.rafId);
@@ -220,6 +268,7 @@ export class Game {
   private gameOver(): void {
     this.running = false;
     cancelAnimationFrame(this.rafId);
+    this.sounds.gameOver();
     this.hud.overlayTitle.textContent = "YOU DIED";
     this.hud.overlayText.innerHTML = `Final score: <b>${this.score}</b> — Press START to try again`;
     this.hud.overlay.classList.remove("hidden");
@@ -242,6 +291,7 @@ export class Game {
     this.damageFlash = Math.max(0, this.damageFlash - dt);
     this.shake = Math.max(0, this.shake - dt * 18);
     this.waveBanner = Math.max(0, this.waveBanner - dt);
+    this.hurtSoundTimer = Math.max(0, this.hurtSoundTimer - dt);
 
     if (this.touchTarget) {
       this.player = movePlayerToward(this.player, this.touchTarget, dt, this.bounds);
@@ -252,11 +302,28 @@ export class Game {
     this.fireTimer -= dt;
     const wantsFire = this.input.shoot || this.touchTarget !== null;
     if (wantsFire && this.fireTimer <= 0) {
-      this.bullets.push(fireBullet(this.player));
-      this.fireTimer = FIRE_COOLDOWN;
+      const spec = WEAPONS[this.weapon];
+      this.bullets.push(...fireBullets(this.player, this.weapon));
+      this.sounds.shoot(this.weapon);
+      this.fireTimer = spec.cooldown;
       this.muzzleFlash = 0.05;
-      this.recoil = 5;
+      this.recoil = this.weapon === "shotgun" || this.weapon === "rifle" ? 8 : 5;
       this.spawnShell();
+      if (Number.isFinite(this.ammo)) {
+        this.ammo -= 1;
+        if (this.ammo <= 0) {
+          this.weapon = "pistol";
+          this.ammo = Infinity;
+          this.sounds.emptyClick();
+          this.floaters.push({
+            x: this.player.x,
+            y: this.player.y - 30,
+            text: "OUT OF AMMO",
+            life: 0.9,
+            maxLife: 0.9,
+          });
+        }
+      }
     }
 
     this.bullets = this.bullets
@@ -266,9 +333,21 @@ export class Game {
     this.spawnTimer -= dt;
     const spawnInterval = Math.max(0.35, SPAWN_INTERVAL_BASE - this.wave * 0.08);
     if (this.spawnTimer <= 0) {
-      this.zombies.push(makeZombie(this.bounds, this.wave));
+      this.zombies.push(
+        makeZombie(this.bounds, this.wave, Math.random, this.zombieSeq++),
+      );
       this.spawnTimer = spawnInterval;
     }
+
+    this.itemTimer -= dt;
+    if (this.itemTimer <= 0) {
+      this.items.push(makeItemDrop(this.bounds));
+      this.itemTimer = ITEM_DROP_INTERVAL + Math.random() * 5;
+    }
+    this.items = this.items
+      .map((it) => stepItem(it, dt))
+      .filter((it) => itemInBounds(it, this.bounds));
+    this.collectItems();
 
     this.zombies = this.zombies.map((z) => stepZombie(z, this.player, dt));
 
@@ -279,6 +358,10 @@ export class Game {
         this.player.hp -= ZOMBIE_STATS[z.kind].dps * dt;
         this.damageFlash = 0.35;
         this.shake = Math.max(this.shake, 3);
+        if (this.hurtSoundTimer <= 0) {
+          this.sounds.playerHurt();
+          this.hurtSoundTimer = HURT_SOUND_COOLDOWN;
+        }
       }
     }
 
@@ -294,24 +377,53 @@ export class Game {
     this.updateHud();
   }
 
+  private collectItems(): void {
+    const remaining: ItemDrop[] = [];
+    for (const item of this.items) {
+      if (circlesCollide(item, this.player)) {
+        this.weapon = item.weapon;
+        this.ammo = WEAPONS[item.weapon].ammo;
+        this.fireTimer = 0;
+        this.sounds.pickup();
+        this.floaters.push({
+          x: this.player.x,
+          y: this.player.y - 30,
+          text: WEAPONS[item.weapon].name,
+          life: 1,
+          maxLife: 1,
+        });
+      } else {
+        remaining.push(item);
+      }
+    }
+    this.items = remaining;
+  }
+
   private resolveCombat(): void {
     const deadZombies = new Set<number>();
     const spentBullets = new Set<number>();
     this.bullets.forEach((bullet, bi) => {
-      this.zombies.forEach((zombie, zi) => {
-        if (deadZombies.has(zi) || spentBullets.has(bi)) return;
+      for (const [zi, zombie] of this.zombies.entries()) {
+        if (spentBullets.has(bi)) break;
+        if (deadZombies.has(zi)) continue;
+        // Piercing rounds stay live after a hit but must not damage the
+        // same zombie again on later frames while passing through it.
+        if (bullet.hitIds.includes(zombie.id)) continue;
         if (circlesCollide(bullet, zombie)) {
-          spentBullets.add(bi);
-          zombie.hp -= 1;
+          bullet.hitIds.push(zombie.id);
+          zombie.hp -= bullet.damage;
           this.spawnBlood(bullet.x, bullet.y, 5);
           if (zombie.hp <= 0) {
             deadZombies.add(zi);
             this.onZombieKilled(zombie);
+          } else {
+            this.sounds.zombieHit();
           }
+          if (bullet.hitIds.length > bullet.pierce) spentBullets.add(bi);
         }
-      });
+      }
     });
-    if (spentBullets.size > 0) {
+    if (deadZombies.size > 0 || spentBullets.size > 0) {
       this.zombies = this.zombies.filter((_, i) => !deadZombies.has(i));
       this.bullets = this.bullets.filter((_, i) => !spentBullets.has(i));
     }
@@ -330,10 +442,12 @@ export class Game {
       maxLife: 0.8,
     });
     if (zombie.kind === "brute") this.shake = Math.max(this.shake, 5);
+    this.sounds.zombieDie(zombie.kind);
     const nextWave = Math.floor(this.kills / 10) + 1;
     if (nextWave > this.wave) {
       this.wave = nextWave;
       this.waveBanner = 1.6;
+      this.sounds.waveUp();
     }
   }
 
@@ -391,6 +505,8 @@ export class Game {
     this.hud.hp.textContent = String(hp);
     this.hud.hpFill.style.width = `${Math.max(0, Math.min(100, hp))}%`;
     this.hud.hpFill.classList.toggle("low", hp <= 30);
+    this.hud.weapon.textContent = WEAPONS[this.weapon].name;
+    this.hud.ammo.textContent = Number.isFinite(this.ammo) ? String(this.ammo) : "∞";
   }
 
   // ------------------------------------------------------------- rendering
@@ -408,6 +524,7 @@ export class Game {
     this.drawBackground();
     this.drawScenery();
     for (const z of this.zombies) this.drawZombie(z);
+    this.drawItems();
     this.drawPlayer();
     this.drawBullets();
     this.drawParticles();
@@ -666,21 +783,62 @@ export class Game {
     ctx.restore();
   }
 
+  private drawItems(): void {
+    const { ctx } = this;
+    for (const item of this.items) {
+      const style = BULLET_STYLES[item.weapon];
+      const bob = Math.sin(this.elapsed * 5 + item.x) * 2;
+      const y = item.y + bob;
+      const r = item.radius;
+
+      // Beacon glow so drops are easy to spot.
+      const glow = ctx.createRadialGradient(item.x, y, 2, item.x, y, r * 2.4);
+      glow.addColorStop(0, `rgba(${style.trail}, 0.45)`);
+      glow.addColorStop(1, `rgba(${style.trail}, 0)`);
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(item.x, y, r * 2.4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Crate.
+      ctx.fillStyle = "#20281f";
+      ctx.strokeStyle = style.crate;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(item.x - r, y - r, r * 2, r * 2, 4);
+      ctx.fill();
+      ctx.stroke();
+
+      // Weapon initial.
+      ctx.fillStyle = style.crate;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = "bold 13px 'Segoe UI', system-ui, sans-serif";
+      ctx.fillText(style.label, item.x, y + 1);
+      ctx.textBaseline = "alphabetic";
+    }
+  }
+
   private drawBullets(): void {
     const { ctx } = this;
     for (const b of this.bullets) {
-      // Tracer trail.
-      const trail = ctx.createLinearGradient(b.x, b.y + 22, b.x, b.y);
-      trail.addColorStop(0, "rgba(245, 243, 107, 0)");
-      trail.addColorStop(1, "rgba(245, 243, 107, 0.8)");
+      const style = BULLET_STYLES[b.weapon];
+      const speed = Math.hypot(b.vx, b.vy) || 1;
+      const trailLen = b.weapon === "rifle" ? 34 : 22;
+      const tx = b.x - (b.vx / speed) * trailLen;
+      const ty = b.y - (b.vy / speed) * trailLen;
+      // Tracer trail along the direction of travel.
+      const trail = ctx.createLinearGradient(tx, ty, b.x, b.y);
+      trail.addColorStop(0, `rgba(${style.trail}, 0)`);
+      trail.addColorStop(1, `rgba(${style.trail}, 0.8)`);
       ctx.strokeStyle = trail;
-      ctx.lineWidth = 3;
+      ctx.lineWidth = b.weapon === "rifle" ? 4 : 3;
       ctx.beginPath();
-      ctx.moveTo(b.x, b.y + 22);
+      ctx.moveTo(tx, ty);
       ctx.lineTo(b.x, b.y);
       ctx.stroke();
       // Glowing head.
-      ctx.fillStyle = "#fffbe0";
+      ctx.fillStyle = style.core;
       ctx.beginPath();
       ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
       ctx.fill();

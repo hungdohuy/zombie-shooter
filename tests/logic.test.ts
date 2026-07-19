@@ -6,7 +6,11 @@ import {
   clamp,
   distance,
   fireBullet,
+  fireBullets,
   inputToDirection,
+  ITEM_RADIUS,
+  itemInBounds,
+  makeItemDrop,
   makeZombie,
   movePlayer,
   movePlayerToward,
@@ -15,14 +19,16 @@ import {
   playerZoneTop,
   spawnPosition,
   stepBullet,
+  stepItem,
   stepZombie,
+  WEAPONS,
   ZOMBIE_RADIUS,
   ZOMBIE_STATS,
   zombieKindForWave,
   zombieSpeedForWave,
 } from "../src/game/logic";
 import { createInputState } from "../src/game/types";
-import type { Bounds, Player } from "../src/game/types";
+import type { Bounds, Bullet, Player } from "../src/game/types";
 
 const bounds: Bounds = { width: 480, height: 720 };
 
@@ -123,6 +129,21 @@ describe("movePlayerToward (touch steering)", () => {
   });
 });
 
+function makeBullet(overrides: Partial<Bullet> = {}): Bullet {
+  return {
+    x: 0,
+    y: 0,
+    radius: 5,
+    vx: 0,
+    vy: 0,
+    damage: 1,
+    pierce: 0,
+    hitIds: [],
+    weapon: "pistol",
+    ...overrides,
+  };
+}
+
 describe("bullets", () => {
   it("fires straight up from the player", () => {
     const player = makePlayer();
@@ -134,22 +155,93 @@ describe("bullets", () => {
   });
 
   it("advances by velocity over time", () => {
-    const bullet = { x: 0, y: 0, radius: 5, vx: 100, vy: -50 };
-    const next = stepBullet(bullet, 0.5);
+    const next = stepBullet(makeBullet({ vx: 100, vy: -50 }), 0.5);
     expect(next.x).toBeCloseTo(50);
     expect(next.y).toBeCloseTo(-25);
   });
 
   it("detects out-of-bounds bullets", () => {
-    expect(bulletInBounds({ x: 10, y: 10, radius: 5, vx: 0, vy: 0 }, bounds)).toBe(true);
-    expect(bulletInBounds({ x: -1, y: 10, radius: 5, vx: 0, vy: 0 }, bounds)).toBe(false);
-    expect(bulletInBounds({ x: 10, y: -100, radius: 5, vx: 0, vy: 0 }, bounds)).toBe(false);
+    expect(bulletInBounds(makeBullet({ x: 10, y: 10 }), bounds)).toBe(true);
+    expect(bulletInBounds(makeBullet({ x: -1, y: 10 }), bounds)).toBe(false);
+    expect(bulletInBounds(makeBullet({ x: 10, y: -100 }), bounds)).toBe(false);
+  });
+});
+
+describe("weapons", () => {
+  it("defines specs for every weapon kind", () => {
+    for (const kind of ["pistol", "shotgun", "smg", "rifle"] as const) {
+      const spec = WEAPONS[kind];
+      expect(spec.cooldown).toBeGreaterThan(0);
+      expect(spec.damage).toBeGreaterThan(0);
+      expect(spec.pellets).toBeGreaterThanOrEqual(1);
+    }
+    expect(WEAPONS.pistol.ammo).toBe(Infinity);
+    expect(WEAPONS.shotgun.pellets).toBeGreaterThan(1);
+    expect(WEAPONS.rifle.pierce).toBeGreaterThan(0);
+  });
+
+  it("shotgun fans pellets symmetrically across the spread cone", () => {
+    const pellets = fireBullets(makePlayer(), "shotgun", () => 0.5);
+    expect(pellets).toHaveLength(WEAPONS.shotgun.pellets);
+    // Middle pellet flies straight up; outer pellets mirror each other.
+    const mid = pellets[Math.floor(pellets.length / 2)];
+    expect(mid.vx).toBeCloseTo(0);
+    expect(mid.vy).toBeCloseTo(-WEAPONS.shotgun.bulletSpeed);
+    expect(pellets[0].vx).toBeCloseTo(-pellets[pellets.length - 1].vx);
+    // All pellets travel up-range.
+    for (const p of pellets) expect(p.vy).toBeLessThan(0);
+  });
+
+  it("rifle bullets carry damage and pierce from the spec", () => {
+    const [bullet] = fireBullets(makePlayer(), "rifle", () => 0.5);
+    expect(bullet.damage).toBe(WEAPONS.rifle.damage);
+    expect(bullet.pierce).toBe(WEAPONS.rifle.pierce);
+    expect(bullet.hitIds).toEqual([]);
+    expect(bullet.vy).toBeCloseTo(-WEAPONS.rifle.bulletSpeed);
+  });
+
+  it("smg jitter stays within its spread cone", () => {
+    for (const roll of [0, 0.5, 0.999]) {
+      const [bullet] = fireBullets(makePlayer(), "smg", () => roll);
+      const angle = Math.atan2(bullet.vy, bullet.vx);
+      expect(Math.abs(angle + Math.PI / 2)).toBeLessThanOrEqual(
+        WEAPONS.smg.spread / 2 + 1e-9,
+      );
+    }
+  });
+});
+
+describe("item drops", () => {
+  it("spawns above the top edge within the field width", () => {
+    for (const roll of [0, 0.4, 0.99]) {
+      const item = makeItemDrop(bounds, () => roll);
+      expect(item.y).toBeLessThan(0);
+      expect(item.x).toBeGreaterThanOrEqual(0);
+      expect(item.x).toBeLessThanOrEqual(bounds.width);
+      expect(["shotgun", "smg", "rifle"]).toContain(item.weapon);
+      expect(item.weapon).not.toBe("pistol");
+    }
+  });
+
+  it("falls downward over time", () => {
+    const item = makeItemDrop(bounds, () => 0.5);
+    const next = stepItem(item, 1);
+    expect(next.y).toBeCloseTo(item.y + item.vy);
+  });
+
+  it("despawns after falling past the bottom edge", () => {
+    const item = makeItemDrop(bounds, () => 0.5);
+    expect(itemInBounds(item, bounds)).toBe(true);
+    expect(
+      itemInBounds({ ...item, y: bounds.height + ITEM_RADIUS + 1 }, bounds),
+    ).toBe(false);
   });
 });
 
 describe("zombies", () => {
   it("moves toward the target", () => {
     const zombie = {
+      id: 1,
       x: 0,
       y: 0,
       radius: ZOMBIE_RADIUS,
@@ -189,7 +281,8 @@ describe("zombies", () => {
   });
 
   it("builds zombies with per-kind stats", () => {
-    const brute = makeZombie(bounds, 3, () => 0);
+    const brute = makeZombie(bounds, 3, () => 0, 7);
+    expect(brute.id).toBe(7);
     expect(brute.kind).toBe("brute");
     expect(brute.hp).toBe(ZOMBIE_STATS.brute.hp);
     expect(brute.maxHp).toBe(ZOMBIE_STATS.brute.hp);

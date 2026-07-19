@@ -11,8 +11,9 @@ A web-based vertical zombie shooter game. Zombies spawn at the **top** of the po
 
 ## Project layout
 
-- `src/game/logic.ts` — pure, side-effect-free game logic (movement, collisions, spawning). This is what the unit tests cover.
+- `src/game/logic.ts` — pure, side-effect-free game logic (movement, collisions, spawning, weapons, item drops). This is what the unit tests cover.
 - `src/game/game.ts` — the `Game` class: input handling, the requestAnimationFrame loop, and canvas rendering.
+- `src/game/audio.ts` — `SoundManager`: all sound effects are synthesized with the Web Audio API (no audio asset files). The AudioContext is created lazily in `unlock()` from the START click (browser autoplay policy) and every method no-ops when audio is unavailable (e.g. jsdom).
 - `src/game/types.ts` — shared types.
 - `src/main.ts` — DOM wiring / entry point.
 - `tests/logic.test.ts` — unit tests for `logic.ts`.
@@ -34,5 +35,6 @@ Standard scripts are defined in `package.json`:
 - The game is a real-time action game, so zombies deal continuous contact damage (per-kind `dps` in `ZOMBIE_STATS` in `logic.ts`) and speed up each wave (`zombieSpeedForWave`). There is a short `START_GRACE` before the first spawn.
 - Layout is portrait (480×720 logical canvas). Zombies spawn only above the top edge (`spawnPosition`), and the player is clamped to the bottom strip of the arena (`PLAYER_ZONE` / `clampToPlayerZone` in `logic.ts`). Bullets always fire straight up. There are three zombie kinds (`walker`, `runner`, `brute`) with per-kind radius/speed/hp/score/dps in `ZOMBIE_STATS`.
 - Mobile/touch: the canvas listens for pointer events; while a pointer is down the player steers toward it (`movePlayerToward`) and auto-fires. The page uses `touch-action: none` so drags don't scroll.
+- Weapons: the player starts with the infinite-ammo pistol; weapon crates (`makeItemDrop`) fall from the top every ~10–15s and grant a shotgun (5-pellet spread), SMG (fast fire), or rail rifle (piercing, 2 damage) with finite ammo (`WEAPONS` in `logic.ts`). When ammo runs out the game reverts to the pistol. Piercing bullets track `hitIds` (zombie `id`s) so they never damage the same zombie twice.
 - Testing gotcha: driving this game through screenshot-based computer-use is unreliable — the action-then-screenshot latency is too slow for frame-accurate play and inputs often don't land, so the player dies with score 0. For real gameplay evidence, either (a) rely on the deterministic loop tests in `tests/game.test.ts` (they drive the real `Game` loop with a fake clock/rAF), or (b) auto-play the unmodified game by dispatching keyboard events from the browser console (the game listens on `window`), e.g. `window.dispatchEvent(new KeyboardEvent('keydown',{code:'ArrowLeft'}))` and `{code:'Space'}` on an interval while keeping the player moving.
 - Only one animation loop may run at a time: `start()` uses a generation token (`loopId`) so repeated START presses cannot stack loops. If you touch the loop, keep that invariant (regression-tested in `tests/game.test.ts`).
