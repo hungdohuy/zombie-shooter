@@ -1,11 +1,14 @@
 :root {
-  --bg: #0b0f0a;
-  --panel: #121a12;
-  --accent: #7bd83a;
-  --accent-dim: #4c8a24;
-  --danger: #e5484d;
-  --text: #e6f0e0;
-  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  --bg: #8fd3ff;
+  --accent: #ff5da2;
+  --accent-dim: #ff9ecb;
+  --sun: #ffd93d;
+  --grass: #6bcb77;
+  --sky: #4d96ff;
+  --danger: #ff6b6b;
+  --text: #1c3d5a;
+  font-family: "Comic Sans MS", "Comic Neue", "Chalkboard SE", "Segoe UI",
+    system-ui, sans-serif;
 }
 
 * {
@@ -23,8 +26,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at 50% 0%, #16241300 0%, var(--bg) 70%),
-    var(--bg);
+  background: linear-gradient(180deg, #8fd3ff 0%, #c3ecff 45%, #d9f8c9 100%);
   color: var(--text);
   overflow: hidden;
   /* Don't let touch drags scroll/zoom the page while playing. */
@@ -61,27 +63,30 @@ body {
 }
 
 .mute-btn {
-  padding: 3px 10px;
+  padding: 3px 12px;
   font-size: clamp(10px, 2.8vw, 12px);
   font-weight: 700;
   letter-spacing: 1px;
   color: var(--accent);
-  background: transparent;
-  border: 1px solid var(--accent-dim);
-  border-radius: 5px;
-  box-shadow: none;
+  background: #ffffff;
+  border: 2px solid var(--accent-dim);
+  border-radius: 999px;
+  box-shadow: 0 2px 0 rgba(255, 93, 162, 0.25);
 }
 
 .mute-btn:hover {
-  background: rgba(123, 216, 58, 0.12);
+  background: #fff0f7;
 }
 
 .title {
   margin: 0;
   font-size: clamp(16px, 4.5vw, 24px);
-  letter-spacing: 3px;
-  color: var(--accent);
-  text-shadow: 0 0 12px rgba(123, 216, 58, 0.4);
+  letter-spacing: 2px;
+  background: linear-gradient(90deg, #ff6b6b, #ff9f43, #ffd93d, #6bcb77, #4d96ff, #b17ae0);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-stroke: 0.5px rgba(28, 61, 90, 0.25);
   white-space: nowrap;
 }
 
@@ -107,9 +112,10 @@ body {
 .hp-bar {
   display: inline-block;
   width: clamp(48px, 14vw, 80px);
-  height: 8px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.12);
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(28, 61, 90, 0.15);
   overflow: hidden;
 }
 
@@ -117,21 +123,22 @@ body {
   display: block;
   height: 100%;
   width: 100%;
-  border-radius: 4px;
-  background: linear-gradient(90deg, var(--accent-dim), var(--accent));
+  border-radius: 999px;
+  background: linear-gradient(90deg, #6bcb77, #38d9a9);
   transition: width 0.15s ease-out, background 0.3s ease;
 }
 
 .hp-fill.low {
-  background: linear-gradient(90deg, #8a2424, var(--danger));
+  background: linear-gradient(90deg, #ff9f43, #ff6b6b);
 }
 
 .stage {
   position: relative;
-  border: 2px solid var(--accent-dim);
-  border-radius: 10px;
+  border: 4px solid #ffffff;
+  border-radius: 18px;
   overflow: hidden;
-  box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 8px 24px rgba(77, 150, 255, 0.35),
+    0 0 0 3px rgba(255, 93, 162, 0.35);
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
@@ -147,7 +154,7 @@ canvas {
   display: block;
   width: 100%;
   height: 100%;
-  background: #0e150c;
+  background: #aee9ff;
   touch-action: none;
   cursor: crosshair;
 }
@@ -160,8 +167,8 @@ canvas {
   align-items: center;
   justify-content: center;
   gap: 14px;
-  background: rgba(6, 10, 6, 0.85);
-  backdrop-filter: blur(2px);
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(3px);
   text-align: center;
   padding: 24px;
 }
@@ -173,9 +180,12 @@ canvas {
 .overlay h2 {
   margin: 0;
   font-size: clamp(26px, 8vw, 40px);
-  letter-spacing: 3px;
-  color: var(--accent);
-  text-shadow: 0 0 18px rgba(123, 216, 58, 0.5);
+  letter-spacing: 2px;
+  background: linear-gradient(90deg, #ff6b6b, #ff9f43, #ffd93d, #6bcb77, #4d96ff, #b17ae0);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(28, 61, 90, 0.2);
 }
 
 .overlay p {
@@ -183,34 +193,41 @@ canvas {
   font-size: clamp(13px, 3.6vw, 16px);
   line-height: 1.6;
   max-width: 400px;
+  color: var(--text);
+}
+
+.overlay b {
+  color: var(--accent);
 }
 
 button {
   cursor: pointer;
   border: none;
-  padding: 14px 40px;
-  font-size: 18px;
+  padding: 14px 44px;
+  font-size: 19px;
   font-weight: 700;
+  font-family: inherit;
   letter-spacing: 2px;
-  color: #06120a;
-  background: var(--accent);
-  border-radius: 8px;
-  box-shadow: 0 0 18px rgba(123, 216, 58, 0.35);
-  transition: transform 0.08s ease, background 0.2s ease;
+  color: #ffffff;
+  background: linear-gradient(180deg, #ff7bb5, #ff5da2);
+  border-radius: 999px;
+  box-shadow: 0 5px 0 #d6437f, 0 8px 18px rgba(255, 93, 162, 0.4);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
   touch-action: manipulation;
 }
 
 button:hover {
-  background: #96f04f;
+  background: linear-gradient(180deg, #ff8fc0, #ff6fae);
 }
 
 button:active {
-  transform: scale(0.96);
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 #d6437f, 0 4px 10px rgba(255, 93, 162, 0.4);
 }
 
 .hint {
   margin: 0;
   font-size: clamp(10px, 2.8vw, 13px);
-  opacity: 0.6;
+  opacity: 0.75;
   text-align: center;
 }
