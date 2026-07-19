@@ -2,11 +2,11 @@ import {
   bulletInBounds,
   circlesCollide,
   fireBullets,
+  HEART_HEAL,
   itemInBounds,
+  makeBoss,
   makeItemDrop,
   makeZombie,
-  MISSION_TARGET_WAVE,
-  missionComplete,
   movePlayer,
   movePlayerToward,
   PLAYER_RADIUS,
@@ -18,6 +18,7 @@ import {
   ZOMBIE_STATS,
 } from "./logic";
 import { SoundManager } from "./audio";
+import { STORY_CHAPTERS, STORY_WIN } from "./story";
 import { THEMES } from "./theme";
 import type { Theme, ThemeKind } from "./theme";
 import { createInputState } from "./types";
@@ -58,9 +59,12 @@ export interface HudElements {
 }
 
 const SPAWN_INTERVAL_BASE = 1.6;
-const ITEM_FIRST_DROP = 7; // seconds until the first weapon crate falls
-const ITEM_DROP_INTERVAL = 10; // base seconds between crates (+ jitter)
+const ITEM_FIRST_DROP = 7; // seconds until the first gift box falls
+const ITEM_DROP_INTERVAL = 10; // base seconds between gift boxes (+ jitter)
 const HURT_SOUND_COOLDOWN = 0.35; // contact damage is continuous; rate-limit
+const COMBO_WINDOW = 1.5; // seconds between kills to keep a combo going
+const COMBO_MAX = 5; // score multiplier cap
+const BOSS_SPAWN_INTERVAL = 1.5; // minion spawn rate during the boss fight
 export const CONTACT_DPS = 20; // baseline; per-kind dps lives in ZOMBIE_STATS
 const START_GRACE = 1.2; // seconds before the first zombie spawns
 
@@ -133,8 +137,20 @@ export class Game {
   private touchTarget: Vec | null = null;
   /** When on, the gun fires continuously without holding Space/touch. */
   private autoFire = false;
-  /** Endless survival, or mission mode with a winning wave target. */
+  /** Endless survival, or the story campaign with chapters and a boss. */
   private mode: GameMode = "endless";
+  /** Story progress: current chapter index into STORY_CHAPTERS. */
+  private chapterIdx = 0;
+  /** True while the "press START to continue" chapter overlay is up. */
+  private awaitingChapter = false;
+  private bossId = -1;
+  private bossActive = false;
+  private comboCount = 0;
+  private comboTimer = 0;
+  /** Text shown by the pop-in banner (wave-ups and chapter starts). */
+  private bannerText = "";
+  /** Called when story mode switches themes, so the page chrome can follow. */
+  onThemeChange?: (kind: ThemeKind) => void;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -262,8 +278,49 @@ export class Game {
     this.damageFlash = 0;
     this.shake = 0;
     this.waveBanner = 0;
+    this.bannerText = "";
+    this.chapterIdx = 0;
+    this.awaitingChapter = false;
+    this.bossActive = false;
+    this.bossId = -1;
+    this.comboCount = 0;
+    this.comboTimer = 0;
     this.input = createInputState();
     this.touchTarget = null;
+    this.updateHud();
+  }
+
+  /** Prepare the field for a story chapter, keeping score across chapters. */
+  private beginChapter(idx: number): void {
+    const chapter = STORY_CHAPTERS[idx];
+    this.chapterIdx = idx;
+    this.zombies = [];
+    this.bullets = [];
+    this.items = [];
+    this.particles = [];
+    this.floaters = [];
+    this.wave = 1;
+    this.kills = 0;
+    this.player.hp = 100; // fresh chapter, fresh hero
+    this.player.x = this.bounds.width / 2;
+    this.player.y = this.bounds.height * 0.85;
+    this.weapon = "pistol";
+    this.ammo = Infinity;
+    this.spawnTimer = START_GRACE * 1.5;
+    this.itemTimer = ITEM_FIRST_DROP;
+    this.comboCount = 0;
+    this.comboTimer = 0;
+    this.bossActive = false;
+    this.bossId = -1;
+    this.theme = THEMES[chapter.theme];
+    this.onThemeChange?.(chapter.theme);
+    if (chapter.boss) {
+      this.bossId = this.zombieSeq++;
+      this.zombies.push(makeBoss(this.bounds, this.bossId));
+      this.bossActive = true;
+    }
+    this.bannerText = `${chapter.title}!`;
+    this.waveBanner = 2;
     this.updateHud();
   }
 
@@ -291,7 +348,14 @@ export class Game {
     // stack a second animation loop (which would double spawns and damage).
     cancelAnimationFrame(this.rafId);
     this.loopId += 1;
-    this.reset();
+    if (this.mode === "story" && this.awaitingChapter) {
+      // Continuing the campaign: keep score/progress, load the chapter.
+      this.awaitingChapter = false;
+      this.beginChapter(this.chapterIdx);
+    } else {
+      this.reset();
+      if (this.mode === "story") this.beginChapter(0);
+    }
     this.hud.overlay.classList.add("hidden");
     this.running = true;
     this.lastTime = performance.now();
@@ -303,8 +367,46 @@ export class Game {
     this.running = false;
     cancelAnimationFrame(this.rafId);
     this.sounds.gameOver();
-    this.hud.overlayTitle.textContent = "OUCH! GAME OVER";
-    this.hud.overlayText.innerHTML = `You scored <b>${this.score}</b> points! Press START to play again!`;
+    if (this.mode === "story") {
+      // Kid-friendly: retry the current chapter, keeping campaign progress.
+      this.awaitingChapter = true;
+      const chapter = STORY_CHAPTERS[this.chapterIdx];
+      this.hud.overlayTitle.textContent = "OUCH!";
+      this.hud.overlayText.innerHTML = `The zombies got you! Press START to try <b>${chapter.title}</b> again!`;
+    } else {
+      this.hud.overlayTitle.textContent = "OUCH! GAME OVER";
+      this.hud.overlayText.innerHTML = `You scored <b>${this.score}</b> points! Press START to play again!`;
+    }
+    this.hud.overlay.classList.remove("hidden");
+  }
+
+  /** Chapter cleared: pause on a story cutscene until START is pressed. */
+  private chapterCleared(): void {
+    this.running = false;
+    cancelAnimationFrame(this.rafId);
+    this.chapterIdx += 1;
+    this.awaitingChapter = true;
+    this.sounds.waveUp();
+    this.spawnConfetti(this.bounds.width / 2, this.bounds.height * 0.35, 40);
+    this.render();
+    const next = STORY_CHAPTERS[this.chapterIdx];
+    this.hud.overlayTitle.textContent = next.title;
+    this.hud.overlayText.innerHTML = `${next.story}<br />Press <b>START</b> to continue!`;
+    this.hud.overlay.classList.remove("hidden");
+  }
+
+  /** The Zombie King is down: the campaign is won. */
+  private winStory(): void {
+    this.running = false;
+    cancelAnimationFrame(this.rafId);
+    this.awaitingChapter = false;
+    this.sounds.victory();
+    this.spawnConfetti(this.bounds.width / 2, this.bounds.height * 0.35, 60);
+    this.spawnConfetti(this.bounds.width * 0.25, this.bounds.height * 0.5, 30);
+    this.spawnConfetti(this.bounds.width * 0.75, this.bounds.height * 0.5, 30);
+    this.render();
+    this.hud.overlayTitle.textContent = "YOU WIN!";
+    this.hud.overlayText.innerHTML = `${STORY_WIN} Final score: <b>${this.score}</b> — press START to play again!`;
     this.hud.overlay.classList.remove("hidden");
   }
 
@@ -326,6 +428,8 @@ export class Game {
     this.shake = Math.max(0, this.shake - dt * 18);
     this.waveBanner = Math.max(0, this.waveBanner - dt);
     this.hurtSoundTimer = Math.max(0, this.hurtSoundTimer - dt);
+    this.comboTimer = Math.max(0, this.comboTimer - dt);
+    if (this.comboTimer === 0) this.comboCount = 0;
 
     if (this.touchTarget) {
       this.player = movePlayerToward(this.player, this.touchTarget, dt, this.bounds);
@@ -365,7 +469,11 @@ export class Game {
       .filter((b) => bulletInBounds(b, this.bounds));
 
     this.spawnTimer -= dt;
-    const spawnInterval = Math.max(0.35, SPAWN_INTERVAL_BASE - this.wave * 0.08);
+    // During the boss fight the wave counter is frozen, so minions arrive at
+    // a fixed, fair pace while the king soaks up the player's fire.
+    const spawnInterval = this.bossActive
+      ? BOSS_SPAWN_INTERVAL
+      : Math.max(0.35, SPAWN_INTERVAL_BASE - this.wave * 0.08);
     if (this.spawnTimer <= 0) {
       this.zombies.push(
         makeZombie(this.bounds, this.wave, Math.random, this.zombieSeq++),
@@ -415,14 +523,21 @@ export class Game {
     const remaining: ItemDrop[] = [];
     for (const item of this.items) {
       if (circlesCollide(item, this.player)) {
-        this.weapon = item.weapon;
-        this.ammo = WEAPONS[item.weapon].ammo;
-        this.fireTimer = 0;
+        let label: string;
+        if (item.drop === "heart") {
+          this.player.hp = Math.min(100, this.player.hp + HEART_HEAL);
+          label = `+${HEART_HEAL} HP`;
+        } else {
+          this.weapon = item.drop;
+          this.ammo = WEAPONS[item.drop].ammo;
+          this.fireTimer = 0;
+          label = WEAPONS[item.drop].name;
+        }
         this.sounds.pickup();
         this.floaters.push({
           x: this.player.x,
           y: this.player.y - 30,
-          text: WEAPONS[item.weapon].name,
+          text: label,
           life: 1,
           maxLife: 1,
         });
@@ -465,43 +580,50 @@ export class Game {
 
   private onZombieKilled(zombie: Zombie): void {
     const stats = ZOMBIE_STATS[zombie.kind];
-    this.score += stats.score;
+    // Quick successive kills chain into a combo score multiplier.
+    const chained = this.comboTimer > 0;
+    this.comboCount = chained ? Math.min(COMBO_MAX, this.comboCount + 1) : 1;
+    this.comboTimer = COMBO_WINDOW;
+    const points = stats.score * this.comboCount;
+    this.score += points;
     this.kills += 1;
-    this.spawnConfetti(zombie.x, zombie.y, zombie.kind === "brute" ? 30 : 16);
+    this.spawnConfetti(
+      zombie.x,
+      zombie.y,
+      zombie.kind === "boss" ? 50 : zombie.kind === "brute" ? 30 : 16,
+    );
     this.floaters.push({
       x: zombie.x,
       y: zombie.y - zombie.radius,
-      text: `+${stats.score}`,
+      text: this.comboCount > 1 ? `+${points} x${this.comboCount}!` : `+${points}`,
       life: 0.8,
       maxLife: 0.8,
     });
-    if (zombie.kind === "brute") this.shake = Math.max(this.shake, 5);
-    this.sounds.zombieDie(zombie.kind);
+    if (zombie.kind === "brute" || zombie.kind === "boss") {
+      this.shake = Math.max(this.shake, zombie.kind === "boss" ? 8 : 5);
+    }
+    this.sounds.zombieDie(zombie.kind === "boss" ? "brute" : zombie.kind);
+
+    if (zombie.kind === "boss") {
+      this.winStory();
+      return;
+    }
+
+    const chapter = this.mode === "story" ? STORY_CHAPTERS[this.chapterIdx] : null;
+    if (chapter?.boss) return; // wave counter frozen during the boss fight
+
     const nextWave = Math.floor(this.kills / 10) + 1;
     if (nextWave > this.wave) {
       this.wave = nextWave;
-      if (this.mode === "mission" && missionComplete(this.wave)) {
-        this.win();
+      if (chapter && this.wave > chapter.waves) {
+        this.chapterCleared();
         return;
       }
+      this.bannerText = `WAVE ${this.wave}!`;
       this.waveBanner = 1.6;
       this.sounds.waveUp();
       this.spawnConfetti(this.bounds.width / 2, this.bounds.height * 0.3, 30);
     }
-  }
-
-  /** Mission accomplished: celebrate and stop the round. */
-  private win(): void {
-    this.running = false;
-    cancelAnimationFrame(this.rafId);
-    this.sounds.victory();
-    this.spawnConfetti(this.bounds.width / 2, this.bounds.height * 0.35, 60);
-    this.spawnConfetti(this.bounds.width * 0.25, this.bounds.height * 0.5, 30);
-    this.spawnConfetti(this.bounds.width * 0.75, this.bounds.height * 0.5, 30);
-    this.render();
-    this.hud.overlayTitle.textContent = "YOU WIN!";
-    this.hud.overlayText.innerHTML = `You beat wave ${MISSION_TARGET_WAVE} and saved the day! Score: <b>${this.score}</b> — press START to play again!`;
-    this.hud.overlay.classList.remove("hidden");
   }
 
   /** Cheerful confetti burst (kills, pickups, wave-ups) — no gore. */
@@ -559,10 +681,14 @@ export class Game {
   private updateHud(): void {
     const hp = Math.ceil(this.player.hp);
     this.hud.score.textContent = String(this.score);
-    this.hud.wave.textContent =
-      this.mode === "mission"
-        ? `${Math.min(this.wave, MISSION_TARGET_WAVE)}/${MISSION_TARGET_WAVE}`
-        : String(this.wave);
+    if (this.mode === "story") {
+      const chapter = STORY_CHAPTERS[this.chapterIdx];
+      this.hud.wave.textContent = chapter.boss
+        ? "BOSS!"
+        : `${Math.min(this.wave, chapter.waves)}/${chapter.waves} · Ch ${this.chapterIdx + 1}`;
+    } else {
+      this.hud.wave.textContent = String(this.wave);
+    }
     this.hud.hp.textContent = String(hp);
     this.hud.hpFill.style.width = `${Math.max(0, Math.min(100, hp))}%`;
     this.hud.hpFill.classList.toggle("low", hp <= 30);
@@ -593,6 +719,7 @@ export class Game {
     ctx.restore();
 
     this.drawVignette();
+    if (this.bossActive) this.drawBossBar();
     if (this.waveBanner > 0) this.drawWaveBanner();
   }
 
@@ -888,14 +1015,65 @@ export class Game {
 
     ctx.restore();
 
-    // HP pips for multi-hit zombies that have taken damage.
-    if (z.maxHp > 1 && z.hp < z.maxHp) {
+    // A golden crown for the Zombie King.
+    if (z.kind === "boss") {
+      const cw = z.radius * 0.9;
+      const cy = z.y - z.radius - 4;
+      ctx.fillStyle = "#ffd93d";
+      ctx.strokeStyle = "#e8a900";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(z.x - cw / 2, cy);
+      ctx.lineTo(z.x - cw / 2, cy - 10);
+      ctx.lineTo(z.x - cw / 4, cy - 3);
+      ctx.lineTo(z.x, cy - 12);
+      ctx.lineTo(z.x + cw / 4, cy - 3);
+      ctx.lineTo(z.x + cw / 2, cy - 10);
+      ctx.lineTo(z.x + cw / 2, cy);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // HP pips for multi-hit zombies that have taken damage (the boss has a
+    // big dedicated bar at the top of the screen instead).
+    if (z.kind !== "boss" && z.maxHp > 1 && z.hp < z.maxHp) {
       const barW = z.radius * 2;
       ctx.fillStyle = theme.zombieHpBack;
       ctx.fillRect(z.x - barW / 2, z.y - z.radius - 12, barW, 5);
       ctx.fillStyle = theme.zombieHpFill;
       ctx.fillRect(z.x - barW / 2, z.y - z.radius - 12, barW * (z.hp / z.maxHp), 5);
     }
+  }
+
+  /** Big "ZOMBIE KING" health bar across the top during the boss fight. */
+  private drawBossBar(): void {
+    const boss = this.zombies.find((z) => z.id === this.bossId);
+    if (!boss) return;
+    const { ctx, bounds } = this;
+    const w = bounds.width * 0.7;
+    const x = (bounds.width - w) / 2;
+    const y = 14;
+    ctx.textAlign = "center";
+    ctx.font = "bold 13px 'Comic Sans MS', 'Segoe UI', system-ui, sans-serif";
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.lineWidth = 3;
+    ctx.strokeText("ZOMBIE KING", bounds.width / 2, y - 2);
+    ctx.fillStyle = "#d6336c";
+    ctx.fillText("ZOMBIE KING", bounds.width / 2, y - 2);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, 10, 5);
+    ctx.fill();
+    ctx.fillStyle = "#ff5d8a";
+    ctx.beginPath();
+    ctx.roundRect(x, y, Math.max(6, w * (boss.hp / boss.maxHp)), 10, 5);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, 10, 5);
+    ctx.stroke();
   }
 
   private drawPlayer(): void {
@@ -1003,29 +1181,52 @@ export class Game {
   private drawItems(): void {
     const { ctx, theme } = this;
     for (const item of this.items) {
-      const style = theme.bullets[item.weapon];
+      const drop = item.drop;
+      const isHeart = drop === "heart";
+      const accent = isHeart ? "#ff6b8a" : theme.bullets[drop].crate;
+      const glowRgb = isHeart ? "255, 105, 140" : theme.bullets[drop].trail;
       const bob = Math.sin(this.elapsed * 5 + item.x) * 2;
       const y = item.y + bob;
       const r = item.radius;
 
       // Beacon glow so drops are easy to spot.
       const glow = ctx.createRadialGradient(item.x, y, 2, item.x, y, r * 2.4);
-      glow.addColorStop(0, `rgba(${style.trail}, 0.45)`);
-      glow.addColorStop(1, `rgba(${style.trail}, 0)`);
+      glow.addColorStop(0, `rgba(${glowRgb}, 0.45)`);
+      glow.addColorStop(1, `rgba(${glowRgb}, 0)`);
       ctx.fillStyle = glow;
       ctx.beginPath();
       ctx.arc(item.x, y, r * 2.4, 0, Math.PI * 2);
       ctx.fill();
 
+      if (drop === "heart") {
+        // Healing heart: two lobes and a point.
+        ctx.fillStyle = "#ff5d8a";
+        ctx.strokeStyle = "#d6336c";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(item.x, y + r * 0.85);
+        ctx.bezierCurveTo(item.x - r * 1.5, y - r * 0.4, item.x - r * 0.55, y - r * 1.15, item.x, y - r * 0.3);
+        ctx.bezierCurveTo(item.x + r * 0.55, y - r * 1.15, item.x + r * 1.5, y - r * 0.4, item.x, y + r * 0.85);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        // Shine.
+        ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+        ctx.beginPath();
+        ctx.arc(item.x - r * 0.35, y - r * 0.35, r * 0.18, 0, Math.PI * 2);
+        ctx.fill();
+        continue;
+      }
+
       // Gift box with a ribbon.
       ctx.fillStyle = theme.crateFill;
-      ctx.strokeStyle = style.crate;
+      ctx.strokeStyle = accent;
       ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.roundRect(item.x - r, y - r, r * 2, r * 2, 5);
       ctx.fill();
       ctx.stroke();
-      ctx.strokeStyle = style.crate;
+      ctx.strokeStyle = accent;
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(item.x, y - r);
@@ -1034,18 +1235,18 @@ export class Game {
       ctx.lineTo(item.x + r, y);
       ctx.stroke();
       // Bow on top.
-      ctx.fillStyle = style.crate;
+      ctx.fillStyle = accent;
       ctx.beginPath();
       ctx.arc(item.x - 3.5, y - r - 2, 3.2, 0, Math.PI * 2);
       ctx.arc(item.x + 3.5, y - r - 2, 3.2, 0, Math.PI * 2);
       ctx.fill();
 
       // Weapon initial.
-      ctx.fillStyle = style.crate;
+      ctx.fillStyle = accent;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.font = "bold 11px 'Comic Sans MS', 'Segoe UI', system-ui, sans-serif";
-      ctx.fillText(style.label, item.x - r / 2, y - r / 2 + 1);
+      ctx.fillText(theme.bullets[drop].label, item.x - r / 2, y - r / 2 + 1);
       ctx.textBaseline = "alphabetic";
     }
   }
@@ -1158,9 +1359,10 @@ export class Game {
     );
     ctx.strokeStyle = theme.waveOutline;
     ctx.lineWidth = 7;
-    ctx.strokeText(`WAVE ${this.wave}!`, 0, 0);
+    const text = this.bannerText || `WAVE ${this.wave}!`;
+    ctx.strokeText(text, 0, 0);
     ctx.fillStyle = grad;
-    ctx.fillText(`WAVE ${this.wave}!`, 0, 0);
+    ctx.fillText(text, 0, 0);
     ctx.restore();
   }
 }

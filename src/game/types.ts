@@ -13,7 +13,7 @@ export interface Player extends Circle {
   vx: number;
 }
 
-export type ZombieKind = "walker" | "runner" | "brute";
+export type ZombieKind = "walker" | "runner" | "brute" | "boss";
 
 export interface Zombie extends Circle {
   /** Unique id so piercing bullets can remember which zombies they hit. */
@@ -39,9 +39,12 @@ export interface Bullet extends Circle {
   weapon: WeaponKind;
 }
 
-/** A weapon crate falling from the top of the field for the player to catch. */
+/** What a falling gift box contains: a better gun, or a healing heart. */
+export type DropKind = Exclude<WeaponKind, "pistol"> | "heart";
+
+/** A gift box falling from the top of the field for the player to catch. */
 export interface ItemDrop extends Circle {
-  weapon: Exclude<WeaponKind, "pistol">;
+  drop: DropKind;
   vy: number;
 }
 
@@ -50,7 +53,7 @@ export interface Bounds {
   height: number;
 }
 
-export type GameMode = "endless" | "mission";
+export type GameMode = "endless" | "story";
 
 export interface InputState {
   up: boolean;
