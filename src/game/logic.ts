@@ -161,7 +161,7 @@ export const WEAPONS: Record<WeaponKind, WeaponSpec> = {
     pellets: 5,
     spread: 0.42,
     pierce: 0,
-    ammo: 14,
+    ammo: 30,
     bulletRadius: 3,
   },
   smg: {
@@ -172,7 +172,7 @@ export const WEAPONS: Record<WeaponKind, WeaponSpec> = {
     pellets: 1,
     spread: 0.1,
     pierce: 0,
-    ammo: 60,
+    ammo: 140,
     bulletRadius: 3,
   },
   rifle: {
@@ -183,7 +183,7 @@ export const WEAPONS: Record<WeaponKind, WeaponSpec> = {
     pellets: 1,
     spread: 0,
     pierce: 3,
-    ammo: 15,
+    ammo: 32,
     bulletRadius: 5,
   },
 };

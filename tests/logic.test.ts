@@ -178,6 +178,10 @@ describe("weapons", () => {
     expect(WEAPONS.pistol.ammo).toBe(Infinity);
     expect(WEAPONS.shotgun.pellets).toBeGreaterThan(1);
     expect(WEAPONS.rifle.pierce).toBeGreaterThan(0);
+    // Pickup guns come with a generous clip so they last a while.
+    expect(WEAPONS.shotgun.ammo).toBeGreaterThanOrEqual(30);
+    expect(WEAPONS.smg.ammo).toBeGreaterThanOrEqual(120);
+    expect(WEAPONS.rifle.ammo).toBeGreaterThanOrEqual(30);
   });
 
   it("shotgun fans pellets symmetrically across the spread cone", () => {

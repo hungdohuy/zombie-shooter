@@ -128,6 +128,8 @@ export class Game {
   private waveBanner = 0;
   /** Canvas-space point the player steers toward while a touch is active. */
   private touchTarget: Vec | null = null;
+  /** When on, the gun fires continuously without holding Space/touch. */
+  private autoFire = false;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -265,6 +267,11 @@ export class Game {
     return this.sounds.toggleMuted();
   }
 
+  /** Enable/disable continuous firing without holding the shoot input. */
+  setAutoFire(on: boolean): void {
+    this.autoFire = on;
+  }
+
   start(): void {
     // START is a user gesture, which is the only moment browsers allow an
     // AudioContext to be created/resumed.
@@ -316,7 +323,7 @@ export class Game {
     }
 
     this.fireTimer -= dt;
-    const wantsFire = this.input.shoot || this.touchTarget !== null;
+    const wantsFire = this.autoFire || this.input.shoot || this.touchTarget !== null;
     if (wantsFire && this.fireTimer <= 0) {
       const spec = WEAPONS[this.weapon];
       this.bullets.push(...fireBullets(this.player, this.weapon));

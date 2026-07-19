@@ -121,6 +121,12 @@ body {
   box-shadow: none;
 }
 
+.chip-btn.chip-active {
+  color: var(--btn-text);
+  background: linear-gradient(180deg, var(--btn-top), var(--btn-bottom));
+  border-color: var(--btn-3d);
+}
+
 .title {
   margin: 0;
   font-size: clamp(16px, 4.5vw, 24px);
