@@ -174,7 +174,7 @@ export class Game {
     for (let i = 0; i < 12; i++) {
       this.decorations.push({
         x: 20 + rand() * (width - 40),
-        y: 60 + rand() * (height - 130),
+        y: height * 0.32 + rand() * (height * 0.62),
         size: 7 + rand() * 6,
         kind: kinds[Math.floor(rand() * kinds.length) % kinds.length],
         color: FLOWER_COLORS[Math.floor(rand() * FLOWER_COLORS.length) % FLOWER_COLORS.length],
@@ -554,8 +554,8 @@ export class Game {
     // Sunny sky melting into a bright meadow.
     const sky = ctx.createLinearGradient(0, 0, 0, bounds.height);
     sky.addColorStop(0, "#7ec8f7");
-    sky.addColorStop(0.35, "#b3e5fc");
-    sky.addColorStop(0.55, "#a5e88a");
+    sky.addColorStop(0.16, "#b3e5fc");
+    sky.addColorStop(0.28, "#a5e88a");
     sky.addColorStop(1, "#7fd66a");
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, bounds.width, bounds.height);
@@ -595,9 +595,9 @@ export class Game {
     // Fluffy clouds drifting across the sky.
     ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
     const clouds = [
-      { y: bounds.height * 0.06, s: 1, speed: 14, off: 0 },
-      { y: bounds.height * 0.14, s: 0.7, speed: 22, off: 260 },
-      { y: bounds.height * 0.22, s: 0.55, speed: 9, off: 120 },
+      { y: bounds.height * 0.045, s: 1, speed: 14, off: 0 },
+      { y: bounds.height * 0.1, s: 0.7, speed: 22, off: 260 },
+      { y: bounds.height * 0.15, s: 0.55, speed: 9, off: 120 },
     ];
     for (const c of clouds) {
       const span = bounds.width + 160;
@@ -611,7 +611,7 @@ export class Game {
 
     // Polka-dot texture on the grass.
     ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
-    for (let y = bounds.height * 0.42; y < bounds.height; y += 52) {
+    for (let y = bounds.height * 0.32; y < bounds.height; y += 52) {
       for (let x = 20 + (Math.floor(y / 52) % 2) * 26; x < bounds.width; x += 52) {
         ctx.beginPath();
         ctx.arc(x, y, 3, 0, Math.PI * 2);
