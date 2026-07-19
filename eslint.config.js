@@ -28,6 +28,7 @@ export default [
         KeyboardEvent: "readonly",
         PointerEvent: "readonly",
         AudioContext: "readonly",
+        localStorage: "readonly",
         GainNode: "readonly",
         OscillatorType: "readonly",
         console: "readonly",

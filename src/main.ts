@@ -1,6 +1,7 @@
 import "./style.css";
 import { Game } from "./game/game";
 import type { HudElements } from "./game/game";
+import type { ThemeKind } from "./game/theme";
 
 function byId<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -32,4 +33,23 @@ const muteBtn = byId<HTMLButtonElement>("mute-btn");
 muteBtn.addEventListener("click", () => {
   const muted = game.toggleSound();
   muteBtn.textContent = muted ? "SOUND: OFF" : "SOUND: ON";
+});
+
+const THEME_KEY = "zoombie-theme";
+const themeBtn = byId<HTMLButtonElement>("theme-btn");
+
+function applyTheme(kind: ThemeKind): void {
+  game.setTheme(kind);
+  document.body.classList.toggle("theme-night", kind === "night");
+  themeBtn.textContent = kind === "night" ? "NIGHT" : "SUNNY";
+}
+
+let themeKind: ThemeKind =
+  localStorage.getItem(THEME_KEY) === "night" ? "night" : "sunny";
+applyTheme(themeKind);
+
+themeBtn.addEventListener("click", () => {
+  themeKind = themeKind === "night" ? "sunny" : "night";
+  localStorage.setItem(THEME_KEY, themeKind);
+  applyTheme(themeKind);
 });

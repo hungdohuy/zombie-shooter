@@ -16,6 +16,8 @@ import {
   ZOMBIE_STATS,
 } from "./logic";
 import { SoundManager } from "./audio";
+import { THEMES } from "./theme";
+import type { Theme, ThemeKind } from "./theme";
 import { createInputState } from "./types";
 import type {
   Bounds,
@@ -88,27 +90,6 @@ interface Decoration {
   color: string;
 }
 
-/** Cheerful cartoon skins: bright bodies, dark outlines, big googly eyes. */
-const ZOMBIE_SKINS: Record<
-  Zombie["kind"],
-  { body: string; head: string; belly: string; outline: string }
-> = {
-  walker: { body: "#6fd44b", head: "#8ce464", belly: "#c4f7a1", outline: "#2f9e44" },
-  runner: { body: "#ffa94d", head: "#ffc078", belly: "#ffe8cc", outline: "#e8590c" },
-  brute: { body: "#b17ae0", head: "#c79bf2", belly: "#eddcfb", outline: "#7c3aad" },
-};
-
-const BULLET_STYLES: Record<
-  WeaponKind,
-  { core: string; trail: string; label: string; crate: string }
-> = {
-  pistol: { core: "#fff3b0", trail: "255, 214, 61", label: "P", crate: "#ffd93d" },
-  shotgun: { core: "#ffe0b8", trail: "255, 150, 60", label: "S", crate: "#ff963c" },
-  smg: { core: "#d8f8ff", trail: "80, 210, 255", label: "M", crate: "#50d2ff" },
-  rifle: { core: "#ffe0f5", trail: "255, 107, 214", label: "R", crate: "#ff6bd6" },
-};
-
-const CONFETTI = ["#ff6b6b", "#ffd93d", "#6bcb77", "#4d96ff", "#ff6bd6", "#ffa94d"];
 const FLOWER_COLORS = ["#ff6bd6", "#ffd93d", "#ff8787", "#74c0fc", "#e599f7"];
 
 export class Game {
@@ -122,7 +103,9 @@ export class Game {
   private particles: Particle[] = [];
   private floaters: Floater[] = [];
   private decorations: Decoration[] = [];
+  private stars: { x: number; y: number; r: number }[] = [];
   private sounds = new SoundManager();
+  private theme: Theme = THEMES.sunny;
   private score = 0;
   private wave = 1;
   private kills = 0;
@@ -153,11 +136,30 @@ export class Game {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("2D canvas context unavailable");
     this.ctx = ctx;
+    // The canvas attributes define the logical play-field size; the backing
+    // store is scaled by devicePixelRatio (capped at 2 to keep phone GPUs
+    // happy) so the picture stays crisp on retina laptops and mobiles while
+    // all game math keeps using logical coordinates.
     this.bounds = { width: canvas.width, height: canvas.height };
+    const dpr = Math.min(
+      2,
+      (typeof window !== "undefined" && window.devicePixelRatio) || 1,
+    );
+    if (dpr !== 1) {
+      canvas.width = Math.round(this.bounds.width * dpr);
+      canvas.height = Math.round(this.bounds.height * dpr);
+      ctx.scale(dpr, dpr);
+    }
     this.makeScenery();
     this.bindInput();
     this.reset();
     this.render();
+  }
+
+  /** Switch the visual theme; safe to call any time (re-renders if idle). */
+  setTheme(kind: ThemeKind): void {
+    this.theme = THEMES[kind];
+    if (!this.running) this.render();
   }
 
   private makeScenery(): void {
@@ -178,6 +180,14 @@ export class Game {
         size: 7 + rand() * 6,
         kind: kinds[Math.floor(rand() * kinds.length) % kinds.length],
         color: FLOWER_COLORS[Math.floor(rand() * FLOWER_COLORS.length) % FLOWER_COLORS.length],
+      });
+    }
+    this.stars = [];
+    for (let i = 0; i < 26; i++) {
+      this.stars.push({
+        x: rand() * width,
+        y: rand() * height * 0.3,
+        r: 0.8 + rand() * 1.4,
       });
     }
   }
@@ -472,7 +482,7 @@ export class Game {
         life,
         maxLife: life,
         size: 2 + Math.random() * 3.5,
-        color: CONFETTI[Math.floor(Math.random() * CONFETTI.length)],
+        color: this.theme.confetti[Math.floor(Math.random() * this.theme.confetti.length)],
         shape: Math.random() > 0.4 ? "square" : "circle",
         spin: (Math.random() - 0.5) * 14,
       });
@@ -548,69 +558,108 @@ export class Game {
   }
 
   private drawBackground(): void {
-    const { ctx, bounds } = this;
+    const { ctx, bounds, theme } = this;
     const zoneTop = playerZoneTop(bounds);
 
-    // Sunny sky melting into a bright meadow.
+    // Sky gradient melting into the field.
     const sky = ctx.createLinearGradient(0, 0, 0, bounds.height);
-    sky.addColorStop(0, "#7ec8f7");
-    sky.addColorStop(0.16, "#b3e5fc");
-    sky.addColorStop(0.28, "#a5e88a");
-    sky.addColorStop(1, "#7fd66a");
+    for (const [stop, color] of theme.sky) sky.addColorStop(stop, color);
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, bounds.width, bounds.height);
 
-    // Smiling sun with slowly turning rays.
+    if (theme.stars) {
+      for (let i = 0; i < this.stars.length; i++) {
+        const s = this.stars[i];
+        const twinkle = 0.4 + 0.6 * Math.abs(Math.sin(this.elapsed * 1.7 + i * 1.3));
+        ctx.globalAlpha = twinkle;
+        ctx.fillStyle = "#f4f7d9";
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
     const sx = bounds.width * 0.82;
     const sy = bounds.height * 0.09;
-    ctx.save();
-    ctx.translate(sx, sy);
-    ctx.rotate(this.elapsed * 0.25);
-    ctx.strokeStyle = "rgba(255, 200, 40, 0.75)";
-    ctx.lineWidth = 5;
-    ctx.lineCap = "round";
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
+    if (theme.celestial === "sun") {
+      // Smiling sun with slowly turning rays.
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(this.elapsed * 0.25);
+      ctx.strokeStyle = "rgba(255, 200, 40, 0.75)";
+      ctx.lineWidth = 5;
+      ctx.lineCap = "round";
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * 28, Math.sin(a) * 28);
+        ctx.lineTo(Math.cos(a) * 38, Math.sin(a) * 38);
+        ctx.stroke();
+      }
+      ctx.restore();
+      ctx.fillStyle = "#ffd93d";
       ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * 28, Math.sin(a) * 28);
-      ctx.lineTo(Math.cos(a) * 38, Math.sin(a) * 38);
+      ctx.arc(sx, sy, 22, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#e8590c";
+      ctx.beginPath();
+      ctx.arc(sx - 7, sy - 4, 2.6, 0, Math.PI * 2);
+      ctx.arc(sx + 7, sy - 4, 2.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#e8590c";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(sx, sy + 3, 9, 0.25, Math.PI - 0.25);
       ctx.stroke();
-    }
-    ctx.restore();
-    ctx.fillStyle = "#ffd93d";
-    ctx.beginPath();
-    ctx.arc(sx, sy, 22, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#e8590c";
-    ctx.beginPath();
-    ctx.arc(sx - 7, sy - 4, 2.6, 0, Math.PI * 2);
-    ctx.arc(sx + 7, sy - 4, 2.6, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "#e8590c";
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.arc(sx, sy + 3, 9, 0.25, Math.PI - 0.25);
-    ctx.stroke();
-
-    // Fluffy clouds drifting across the sky.
-    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
-    const clouds = [
-      { y: bounds.height * 0.045, s: 1, speed: 14, off: 0 },
-      { y: bounds.height * 0.1, s: 0.7, speed: 22, off: 260 },
-      { y: bounds.height * 0.15, s: 0.55, speed: 9, off: 120 },
-    ];
-    for (const c of clouds) {
-      const span = bounds.width + 160;
-      const cx = ((this.elapsed * c.speed + c.off) % span) - 80;
+    } else {
+      // Moon with a soft glow and craters.
+      const glow = ctx.createRadialGradient(sx, sy, 4, sx, sy, 70);
+      glow.addColorStop(0, "rgba(226, 235, 200, 0.55)");
+      glow.addColorStop(1, "rgba(226, 235, 200, 0)");
+      ctx.fillStyle = glow;
+      ctx.fillRect(sx - 70, sy - 70, 140, 140);
+      ctx.fillStyle = "#e7ecd2";
       ctx.beginPath();
-      ctx.ellipse(cx, c.y, 34 * c.s, 13 * c.s, 0, 0, Math.PI * 2);
-      ctx.ellipse(cx - 22 * c.s, c.y + 4 * c.s, 20 * c.s, 10 * c.s, 0, 0, Math.PI * 2);
-      ctx.ellipse(cx + 24 * c.s, c.y + 5 * c.s, 22 * c.s, 10 * c.s, 0, 0, Math.PI * 2);
+      ctx.arc(sx, sy, 20, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(190, 198, 168, 0.6)";
+      ctx.beginPath();
+      ctx.arc(sx - 6, sy - 4, 4, 0, Math.PI * 2);
+      ctx.arc(sx + 7, sy + 6, 3, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // Polka-dot texture on the grass.
-    ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
+    if (theme.clouds) {
+      // Fluffy clouds drifting across the sky.
+      ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+      const clouds = [
+        { y: bounds.height * 0.045, s: 1, speed: 14, off: 0 },
+        { y: bounds.height * 0.1, s: 0.7, speed: 22, off: 260 },
+        { y: bounds.height * 0.15, s: 0.55, speed: 9, off: 120 },
+      ];
+      for (const c of clouds) {
+        const span = bounds.width + 160;
+        const cx = ((this.elapsed * c.speed + c.off) % span) - 80;
+        ctx.beginPath();
+        ctx.ellipse(cx, c.y, 34 * c.s, 13 * c.s, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx - 22 * c.s, c.y + 4 * c.s, 20 * c.s, 10 * c.s, 0, 0, Math.PI * 2);
+        ctx.ellipse(cx + 24 * c.s, c.y + 5 * c.s, 22 * c.s, 10 * c.s, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    if (theme.topHaze) {
+      // Warning band at the spawn edge.
+      const haze = ctx.createLinearGradient(0, 0, 0, 90);
+      haze.addColorStop(0, `rgba(${theme.topHaze}, 0.22)`);
+      haze.addColorStop(1, `rgba(${theme.topHaze}, 0)`);
+      ctx.fillStyle = haze;
+      ctx.fillRect(0, 0, bounds.width, 90);
+    }
+
+    // Dot texture on the field.
+    ctx.fillStyle = theme.grassDots;
     for (let y = bounds.height * 0.32; y < bounds.height; y += 52) {
       for (let x = 20 + (Math.floor(y / 52) % 2) * 26; x < bounds.width; x += 52) {
         ctx.beginPath();
@@ -619,10 +668,10 @@ export class Game {
       }
     }
 
-    // The player's home zone: brighter grass with a friendly dashed line.
-    ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
+    // The player's home zone with its dashed defence line.
+    ctx.fillStyle = theme.zoneFill;
     ctx.fillRect(0, zoneTop, bounds.width, bounds.height - zoneTop);
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
+    ctx.strokeStyle = theme.zoneLine;
     ctx.lineWidth = 3;
     ctx.setLineDash([16, 12]);
     ctx.beginPath();
@@ -633,7 +682,36 @@ export class Game {
   }
 
   private drawScenery(): void {
-    const { ctx } = this;
+    const { ctx, theme } = this;
+    if (theme.deco === "graveyard") {
+      for (const d of this.decorations) {
+        const w = d.size * 2;
+        const h = d.size * 2.4;
+        ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
+        ctx.beginPath();
+        ctx.ellipse(d.x, d.y + h * 0.5, w * 0.7, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "#39463e";
+        ctx.beginPath();
+        ctx.moveTo(d.x - w / 2, d.y + h * 0.5);
+        ctx.lineTo(d.x - w / 2, d.y - h * 0.2);
+        ctx.arc(d.x, d.y - h * 0.2, w / 2, Math.PI, 0);
+        ctx.lineTo(d.x + w / 2, d.y + h * 0.5);
+        ctx.closePath();
+        ctx.fill();
+        if (d.kind === "flower") {
+          ctx.strokeStyle = "#242e28";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(d.x, d.y - h * 0.25);
+          ctx.lineTo(d.x, d.y + h * 0.05);
+          ctx.moveTo(d.x - 4, d.y - h * 0.12);
+          ctx.lineTo(d.x + 4, d.y - h * 0.12);
+          ctx.stroke();
+        }
+      }
+      return;
+    }
     for (const d of this.decorations) {
       const s = d.size;
       ctx.fillStyle = "rgba(0, 90, 30, 0.12)";
@@ -694,15 +772,15 @@ export class Game {
   }
 
   private drawZombie(z: Zombie): void {
-    const { ctx } = this;
-    const skin = ZOMBIE_SKINS[z.kind];
+    const { ctx, theme } = this;
+    const skin = theme.zombies[z.kind];
     const angle = Math.atan2(this.player.y - z.y, this.player.x - z.x);
     const wobbleSpeed = z.kind === "runner" ? 14 : z.kind === "brute" ? 5 : 8;
     const wobble = Math.sin(this.elapsed * wobbleSpeed + z.phase) * 0.16;
     const armSwing = Math.sin(this.elapsed * wobbleSpeed + z.phase);
 
     // Soft ground shadow.
-    ctx.fillStyle = "rgba(0, 90, 30, 0.18)";
+    ctx.fillStyle = theme.shadow;
     ctx.beginPath();
     ctx.ellipse(z.x, z.y + z.radius * 0.75, z.radius * 0.95, z.radius * 0.4, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -751,12 +829,12 @@ export class Game {
 
     // Big googly eyes with wandering pupils.
     const look = Math.sin(this.elapsed * 3 + z.phase) * z.radius * 0.05;
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = theme.eyeWhite;
     ctx.beginPath();
     ctx.arc(z.radius * 0.72, -z.radius * 0.26, z.radius * 0.22, 0, Math.PI * 2);
     ctx.arc(z.radius * 0.72, z.radius * 0.26, z.radius * 0.19, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#20303c";
+    ctx.fillStyle = theme.pupil;
     ctx.beginPath();
     ctx.arc(z.radius * 0.82, -z.radius * 0.26 + look, z.radius * 0.1, 0, Math.PI * 2);
     ctx.arc(z.radius * 0.82, z.radius * 0.26 - look, z.radius * 0.085, 0, Math.PI * 2);
@@ -774,22 +852,23 @@ export class Game {
     // HP pips for multi-hit zombies that have taken damage.
     if (z.maxHp > 1 && z.hp < z.maxHp) {
       const barW = z.radius * 2;
-      ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
+      ctx.fillStyle = theme.zombieHpBack;
       ctx.fillRect(z.x - barW / 2, z.y - z.radius - 12, barW, 5);
-      ctx.fillStyle = "#ff6b6b";
+      ctx.fillStyle = theme.zombieHpFill;
       ctx.fillRect(z.x - barW / 2, z.y - z.radius - 12, barW * (z.hp / z.maxHp), 5);
     }
   }
 
   private drawPlayer(): void {
-    const { ctx } = this;
+    const { ctx, theme } = this;
+    const c = theme.player;
     const p = this.player;
     const lean = (p.vx / 300) * 0.2;
     const bob = Math.abs(p.vx) > 1 ? Math.sin(this.elapsed * 16) * 1.5 : 0;
     const recoil = this.recoil;
 
     // Soft ground shadow.
-    ctx.fillStyle = "rgba(0, 90, 30, 0.22)";
+    ctx.fillStyle = theme.shadow;
     ctx.beginPath();
     ctx.ellipse(p.x, p.y + p.radius * 0.8, p.radius, p.radius * 0.42, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -798,15 +877,15 @@ export class Game {
     ctx.translate(p.x, p.y + bob);
     ctx.rotate(lean);
 
-    // Bubble blaster pointing up-range, with recoil.
-    ctx.strokeStyle = "#ff6bd6";
+    // Blaster pointing up-range, with recoil.
+    ctx.strokeStyle = c.gun;
     ctx.lineCap = "round";
     ctx.lineWidth = 7;
     ctx.beginPath();
     ctx.moveTo(0, -p.radius * 0.2 + recoil);
     ctx.lineTo(0, -p.radius - 12 + recoil);
     ctx.stroke();
-    ctx.fillStyle = "#ffd93d";
+    ctx.fillStyle = c.gunTip;
     ctx.beginPath();
     ctx.arc(0, -p.radius - 13 + recoil, 5, 0, Math.PI * 2);
     ctx.fill();
@@ -814,7 +893,7 @@ export class Game {
     // Sparkly star burst when firing.
     if (this.muzzleFlash > 0) {
       const fy = -p.radius - 18 + recoil;
-      ctx.strokeStyle = "#fff3b0";
+      ctx.strokeStyle = c.flashRay;
       ctx.lineWidth = 3;
       for (let i = 0; i < 4; i++) {
         const a = (i / 4) * Math.PI + this.elapsed * 8;
@@ -823,14 +902,14 @@ export class Game {
         ctx.lineTo(Math.cos(a) * 10, fy + Math.sin(a) * 10);
         ctx.stroke();
       }
-      ctx.fillStyle = "#fffbe6";
+      ctx.fillStyle = c.flashCore;
       ctx.beginPath();
       ctx.arc(0, fy, 4, 0, Math.PI * 2);
       ctx.fill();
     }
 
     // Arms holding the blaster.
-    ctx.strokeStyle = "#ffc9a3";
+    ctx.strokeStyle = c.arm;
     ctx.lineWidth = 5;
     ctx.beginPath();
     ctx.moveTo(-p.radius * 0.55, 2);
@@ -839,16 +918,16 @@ export class Game {
     ctx.lineTo(2, -p.radius * 0.5 + recoil * 0.5);
     ctx.stroke();
 
-    // Bright t-shirt with an outline.
-    ctx.fillStyle = "#4aa8ff";
-    ctx.strokeStyle = "#1971c2";
+    // Shirt / vest with an outline.
+    ctx.fillStyle = c.shirt;
+    ctx.strokeStyle = c.shirtOutline;
     ctx.lineWidth = 2.5;
     ctx.beginPath();
     ctx.ellipse(0, 2, p.radius * 0.95, p.radius * 0.8, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
-    // A star on the back of the shirt.
-    ctx.fillStyle = "#ffd93d";
+    // A star on the back.
+    ctx.fillStyle = c.star;
     ctx.beginPath();
     for (let i = 0; i < 10; i++) {
       const r = i % 2 === 0 ? p.radius * 0.34 : p.radius * 0.15;
@@ -861,20 +940,20 @@ export class Game {
     ctx.closePath();
     ctx.fill();
 
-    // Head with a red cap (seen from behind — facing the horde).
-    ctx.fillStyle = "#ffc9a3";
+    // Head with a cap (seen from behind — facing the horde).
+    ctx.fillStyle = c.skin;
     ctx.beginPath();
     ctx.arc(0, -p.radius * 0.35, p.radius * 0.5, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#ff6b6b";
-    ctx.strokeStyle = "#e03131";
+    ctx.fillStyle = c.cap;
+    ctx.strokeStyle = c.capOutline;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(0, -p.radius * 0.42, p.radius * 0.52, Math.PI * 0.95, Math.PI * 2.05);
     ctx.fill();
     ctx.stroke();
     // Cap button.
-    ctx.fillStyle = "#ffd93d";
+    ctx.fillStyle = c.button;
     ctx.beginPath();
     ctx.arc(0, -p.radius * 0.9, p.radius * 0.12, 0, Math.PI * 2);
     ctx.fill();
@@ -883,9 +962,9 @@ export class Game {
   }
 
   private drawItems(): void {
-    const { ctx } = this;
+    const { ctx, theme } = this;
     for (const item of this.items) {
-      const style = BULLET_STYLES[item.weapon];
+      const style = theme.bullets[item.weapon];
       const bob = Math.sin(this.elapsed * 5 + item.x) * 2;
       const y = item.y + bob;
       const r = item.radius;
@@ -900,7 +979,7 @@ export class Game {
       ctx.fill();
 
       // Gift box with a ribbon.
-      ctx.fillStyle = "#ffffff";
+      ctx.fillStyle = theme.crateFill;
       ctx.strokeStyle = style.crate;
       ctx.lineWidth = 2.5;
       ctx.beginPath();
@@ -933,28 +1012,37 @@ export class Game {
   }
 
   private drawBullets(): void {
-    const { ctx } = this;
+    const { ctx, theme } = this;
     for (const b of this.bullets) {
-      const style = BULLET_STYLES[b.weapon];
+      const style = theme.bullets[b.weapon];
       const speed = Math.hypot(b.vx, b.vy) || 1;
-      const trailLen = b.weapon === "rifle" ? 34 : 22;
+      const trailLen = b.weapon === "rifle" ? 34 : 24;
       const tx = b.x - (b.vx / speed) * trailLen;
       const ty = b.y - (b.vy / speed) * trailLen;
       // Tracer trail along the direction of travel.
       const trail = ctx.createLinearGradient(tx, ty, b.x, b.y);
       trail.addColorStop(0, `rgba(${style.trail}, 0)`);
-      trail.addColorStop(1, `rgba(${style.trail}, 0.8)`);
+      trail.addColorStop(1, `rgba(${style.trail}, 0.95)`);
       ctx.strokeStyle = trail;
-      ctx.lineWidth = b.weapon === "rifle" ? 4 : 3;
+      ctx.lineCap = "round";
+      ctx.lineWidth = b.weapon === "rifle" ? 5 : 4;
       ctx.beginPath();
       ctx.moveTo(tx, ty);
       ctx.lineTo(b.x, b.y);
       ctx.stroke();
-      // Glowing head.
-      ctx.fillStyle = style.core;
+      // Head with a bright halo and a contrasting outline ring so it stays
+      // visible over any background (bright sky or dark field alike).
+      ctx.fillStyle = `rgba(${style.trail}, 0.25)`;
       ctx.beginPath();
-      ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+      ctx.arc(b.x, b.y, b.radius + 3.5, 0, Math.PI * 2);
       ctx.fill();
+      ctx.fillStyle = style.core;
+      ctx.strokeStyle = style.outline;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, b.radius + 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
     }
   }
 
@@ -979,31 +1067,44 @@ export class Game {
   }
 
   private drawFloaters(): void {
-    const { ctx } = this;
+    const { ctx, theme } = this;
     ctx.textAlign = "center";
     ctx.font = "bold 17px 'Comic Sans MS', 'Segoe UI', system-ui, sans-serif";
     for (const f of this.floaters) {
       ctx.globalAlpha = Math.max(0, f.life / f.maxLife);
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+      ctx.strokeStyle = theme.floaterStroke;
       ctx.lineWidth = 4;
       ctx.strokeText(f.text, f.x, f.y);
-      ctx.fillStyle = "#ff5da2";
+      ctx.fillStyle = theme.floaterFill;
       ctx.fillText(f.text, f.x, f.y);
     }
     ctx.globalAlpha = 1;
   }
 
   private drawVignette(): void {
-    const { ctx, bounds } = this;
-    // Just a gentle warm flash when the player gets bumped — no dark edges.
+    const { ctx, bounds, theme } = this;
+    if (theme.vignette > 0) {
+      const v = ctx.createRadialGradient(
+        bounds.width / 2,
+        bounds.height / 2,
+        bounds.height * 0.35,
+        bounds.width / 2,
+        bounds.height / 2,
+        bounds.height * 0.75,
+      );
+      v.addColorStop(0, "rgba(0, 0, 0, 0)");
+      v.addColorStop(1, `rgba(0, 0, 0, ${theme.vignette})`);
+      ctx.fillStyle = v;
+      ctx.fillRect(0, 0, bounds.width, bounds.height);
+    }
     if (this.damageFlash > 0) {
-      ctx.fillStyle = `rgba(255, 120, 60, ${this.damageFlash * 0.45})`;
+      ctx.fillStyle = `rgba(${theme.damageFlash}, ${this.damageFlash * 0.45})`;
       ctx.fillRect(0, 0, bounds.width, bounds.height);
     }
   }
 
   private drawWaveBanner(): void {
-    const { ctx, bounds } = this;
+    const { ctx, bounds, theme } = this;
     const alpha = Math.min(1, this.waveBanner / 0.4);
     const pop = 1 + Math.max(0, this.waveBanner - 1.2) * 1.5;
     ctx.save();
@@ -1012,15 +1113,14 @@ export class Game {
     ctx.scale(pop, pop);
     ctx.textAlign = "center";
     ctx.font = "bold 36px 'Comic Sans MS', 'Segoe UI', system-ui, sans-serif";
-    const rainbow = ctx.createLinearGradient(-110, 0, 110, 0);
-    rainbow.addColorStop(0, "#ff6b6b");
-    rainbow.addColorStop(0.33, "#ffd93d");
-    rainbow.addColorStop(0.66, "#6bcb77");
-    rainbow.addColorStop(1, "#4d96ff");
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+    const grad = ctx.createLinearGradient(-110, 0, 110, 0);
+    theme.waveStops.forEach((color, i) =>
+      grad.addColorStop(theme.waveStops.length === 1 ? 0 : i / (theme.waveStops.length - 1), color),
+    );
+    ctx.strokeStyle = theme.waveOutline;
     ctx.lineWidth = 7;
     ctx.strokeText(`WAVE ${this.wave}!`, 0, 0);
-    ctx.fillStyle = rainbow;
+    ctx.fillStyle = grad;
     ctx.fillText(`WAVE ${this.wave}!`, 0, 0);
     ctx.restore();
   }
