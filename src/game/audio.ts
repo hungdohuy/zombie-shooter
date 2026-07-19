@@ -150,6 +150,16 @@ export class SoundManager {
     this.tone({ type: "sine", from: 659, dur: 0.2, vol: 0.22, delay: 0.2 });
   }
 
+  /** Rising fanfare for winning a mission. */
+  victory(): void {
+    const notes = [523, 659, 784, 1047];
+    notes.forEach((f, i) =>
+      this.tone({ type: "sine", from: f, dur: 0.18, vol: 0.22, delay: i * 0.13 }),
+    );
+    this.tone({ type: "triangle", from: 1319, dur: 0.55, vol: 0.2, delay: 0.55 });
+    this.tone({ type: "sine", from: 784, dur: 0.55, vol: 0.16, delay: 0.55 });
+  }
+
   /** A playful "wah-wah-waaah" instead of a scary crash. */
   gameOver(): void {
     this.tone({ type: "triangle", from: 392, to: 370, dur: 0.25, vol: 0.22 });

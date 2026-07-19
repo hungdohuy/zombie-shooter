@@ -5,6 +5,8 @@ import {
   itemInBounds,
   makeItemDrop,
   makeZombie,
+  MISSION_TARGET_WAVE,
+  missionComplete,
   movePlayer,
   movePlayerToward,
   PLAYER_RADIUS,
@@ -22,6 +24,7 @@ import { createInputState } from "./types";
 import type {
   Bounds,
   Bullet,
+  GameMode,
   InputState,
   ItemDrop,
   Player,
@@ -130,6 +133,8 @@ export class Game {
   private touchTarget: Vec | null = null;
   /** When on, the gun fires continuously without holding Space/touch. */
   private autoFire = false;
+  /** Endless survival, or mission mode with a winning wave target. */
+  private mode: GameMode = "endless";
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -270,6 +275,12 @@ export class Game {
   /** Enable/disable continuous firing without holding the shoot input. */
   setAutoFire(on: boolean): void {
     this.autoFire = on;
+  }
+
+  /** Pick the game mode; takes effect immediately (HUD shows the target). */
+  setMode(mode: GameMode): void {
+    this.mode = mode;
+    if (!this.running) this.updateHud();
   }
 
   start(): void {
@@ -469,10 +480,28 @@ export class Game {
     const nextWave = Math.floor(this.kills / 10) + 1;
     if (nextWave > this.wave) {
       this.wave = nextWave;
+      if (this.mode === "mission" && missionComplete(this.wave)) {
+        this.win();
+        return;
+      }
       this.waveBanner = 1.6;
       this.sounds.waveUp();
       this.spawnConfetti(this.bounds.width / 2, this.bounds.height * 0.3, 30);
     }
+  }
+
+  /** Mission accomplished: celebrate and stop the round. */
+  private win(): void {
+    this.running = false;
+    cancelAnimationFrame(this.rafId);
+    this.sounds.victory();
+    this.spawnConfetti(this.bounds.width / 2, this.bounds.height * 0.35, 60);
+    this.spawnConfetti(this.bounds.width * 0.25, this.bounds.height * 0.5, 30);
+    this.spawnConfetti(this.bounds.width * 0.75, this.bounds.height * 0.5, 30);
+    this.render();
+    this.hud.overlayTitle.textContent = "YOU WIN!";
+    this.hud.overlayText.innerHTML = `You beat wave ${MISSION_TARGET_WAVE} and saved the day! Score: <b>${this.score}</b> — press START to play again!`;
+    this.hud.overlay.classList.remove("hidden");
   }
 
   /** Cheerful confetti burst (kills, pickups, wave-ups) — no gore. */
@@ -530,7 +559,10 @@ export class Game {
   private updateHud(): void {
     const hp = Math.ceil(this.player.hp);
     this.hud.score.textContent = String(this.score);
-    this.hud.wave.textContent = String(this.wave);
+    this.hud.wave.textContent =
+      this.mode === "mission"
+        ? `${Math.min(this.wave, MISSION_TARGET_WAVE)}/${MISSION_TARGET_WAVE}`
+        : String(this.wave);
     this.hud.hp.textContent = String(hp);
     this.hud.hpFill.style.width = `${Math.max(0, Math.min(100, hp))}%`;
     this.hud.hpFill.classList.toggle("low", hp <= 30);

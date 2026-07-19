@@ -272,6 +272,17 @@ export function zombieSpeedForWave(wave: number): number {
   return 55 + wave * 8;
 }
 
+/** Mission mode: complete this wave to win. */
+export const MISSION_TARGET_WAVE = 5;
+
+/**
+ * Mission mode victory check: the wave counter advances past the target
+ * once the target wave's kill quota is met, which is the winning moment.
+ */
+export function missionComplete(wave: number): boolean {
+  return wave > MISSION_TARGET_WAVE;
+}
+
 /**
  * Pick which kind of zombie to spawn. Runners appear from wave 2 and brutes
  * from wave 3, with odds that grow slightly as waves progress.
