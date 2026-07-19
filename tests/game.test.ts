@@ -21,22 +21,28 @@ function frame(ms = 16): void {
   for (const p of batch) p.cb(now);
 }
 
+/**
+ * A canvas context stub where every property access / method call returns
+ * another stub, so chained canvas APIs (gradients, transforms, paths) all
+ * work without a real 2D context.
+ */
 function fakeCtx(): CanvasRenderingContext2D {
-  return new Proxy(
-    {},
-    {
-      get: () => () => undefined,
-      set: () => true,
-    },
-  ) as unknown as CanvasRenderingContext2D;
+  const stub: unknown = new Proxy(function () {}, {
+    get: () => stub,
+    set: () => true,
+    apply: () => stub,
+  });
+  return stub as CanvasRenderingContext2D;
 }
 
 function fakeCanvas(): HTMLCanvasElement {
   return {
-    width: 800,
-    height: 600,
+    width: 480,
+    height: 720,
     getContext: () => fakeCtx(),
     focus: () => undefined,
+    addEventListener: () => undefined,
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 480, height: 720 }),
   } as unknown as HTMLCanvasElement;
 }
 
@@ -44,7 +50,12 @@ function fakeEl() {
   return {
     textContent: "",
     innerHTML: "",
-    classList: { add: () => undefined, remove: () => undefined },
+    style: { width: "" },
+    classList: {
+      add: () => undefined,
+      remove: () => undefined,
+      toggle: () => undefined,
+    },
   };
 }
 
@@ -53,6 +64,7 @@ function fakeHud() {
     score: fakeEl(),
     wave: fakeEl(),
     hp: fakeEl(),
+    hpFill: fakeEl(),
     overlay: fakeEl(),
     overlayTitle: fakeEl(),
     overlayText: fakeEl(),
@@ -77,6 +89,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("Game loop", () => {
@@ -84,7 +97,7 @@ describe("Game loop", () => {
     const hud = fakeHud();
     const game = new Game(fakeCanvas(), hud);
     game.start();
-    // ~2.5s of no input: zombies spawn at the edges and must travel inward,
+    // ~2.5s of no input: zombies spawn at the top edge and must travel down,
     // so the player should still be alive.
     for (let i = 0; i < 156; i++) frame(16);
     expect(Number(hud.hp.textContent)).toBeGreaterThan(0);
@@ -105,21 +118,16 @@ describe("Game loop", () => {
   });
 
   it("shooting zombies increases the score without the player dying", () => {
-    // Deterministic spawns: rng pairs (0.3, 0.5) => right edge, y = 300,
-    // so zombies march straight left along the player's firing line.
-    let call = 0;
-    vi.spyOn(Math, "random").mockImplementation(() =>
-      call++ % 2 === 0 ? 0.3 : 0.5,
-    );
+    // Deterministic spawns: rng always 0.5 => zombies spawn at the top edge,
+    // horizontally centered — directly up-range of the player, who fires
+    // straight up. Wave 1 with roll 0.5 always yields walkers.
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
 
     const hud = fakeHud();
     const game = new Game(fakeCanvas(), hud);
     game.start();
 
-    // Face right (one frame of movement), then hold fire.
-    window.dispatchEvent(new KeyboardEvent("keydown", { code: "ArrowRight" }));
-    frame(16);
-    window.dispatchEvent(new KeyboardEvent("keyup", { code: "ArrowRight" }));
+    // Hold fire; bullets travel straight up into the descending horde.
     window.dispatchEvent(new KeyboardEvent("keydown", { code: "Space" }));
 
     for (let i = 0; i < 375; i++) frame(16); // ~6s

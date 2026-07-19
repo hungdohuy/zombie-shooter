@@ -7,27 +7,32 @@ import {
   distance,
   fireBullet,
   inputToDirection,
+  makeZombie,
   movePlayer,
+  movePlayerToward,
   PLAYER_RADIUS,
   PLAYER_SPEED,
+  playerZoneTop,
   spawnPosition,
   stepBullet,
   stepZombie,
   ZOMBIE_RADIUS,
+  ZOMBIE_STATS,
+  zombieKindForWave,
   zombieSpeedForWave,
 } from "../src/game/logic";
 import { createInputState } from "../src/game/types";
 import type { Bounds, Player } from "../src/game/types";
 
-const bounds: Bounds = { width: 800, height: 600 };
+const bounds: Bounds = { width: 480, height: 720 };
 
 function makePlayer(overrides: Partial<Player> = {}): Player {
   return {
-    x: 400,
-    y: 300,
+    x: 240,
+    y: 610,
     radius: PLAYER_RADIUS,
     hp: 100,
-    facing: { x: 0, y: -1 },
+    vx: 0,
     ...overrides,
   };
 }
@@ -74,9 +79,9 @@ describe("inputToDirection", () => {
 describe("movePlayer", () => {
   it("moves right at player speed", () => {
     const input = { ...createInputState(), right: true };
-    const next = movePlayer(makePlayer(), input, 1, bounds);
-    expect(next.x).toBeCloseTo(400 + PLAYER_SPEED);
-    expect(next.facing).toEqual({ x: 1, y: 0 });
+    const next = movePlayer(makePlayer(), input, 0.1, bounds);
+    expect(next.x).toBeCloseTo(240 + PLAYER_SPEED * 0.1);
+    expect(next.vx).toBeCloseTo(PLAYER_SPEED);
   });
 
   it("clamps to arena edges", () => {
@@ -85,17 +90,47 @@ describe("movePlayer", () => {
     expect(next.x).toBe(PLAYER_RADIUS);
   });
 
-  it("keeps last facing when idle", () => {
-    const next = movePlayer(makePlayer({ facing: { x: 1, y: 0 } }), createInputState(), 1, bounds);
-    expect(next.facing).toEqual({ x: 1, y: 0 });
+  it("cannot leave the bottom player zone upward", () => {
+    const input = { ...createInputState(), up: true };
+    const start = makePlayer({ y: playerZoneTop(bounds) + PLAYER_RADIUS + 5 });
+    const next = movePlayer(start, input, 1, bounds);
+    expect(next.y).toBe(playerZoneTop(bounds) + PLAYER_RADIUS);
+  });
+
+  it("clamps to the bottom edge", () => {
+    const input = { ...createInputState(), down: true };
+    const next = movePlayer(makePlayer({ y: bounds.height - 20 }), input, 1, bounds);
+    expect(next.y).toBe(bounds.height - PLAYER_RADIUS);
+  });
+});
+
+describe("movePlayerToward (touch steering)", () => {
+  it("moves toward the target point", () => {
+    const next = movePlayerToward(makePlayer(), { x: 300, y: 610 }, 0.05, bounds);
+    expect(next.x).toBeGreaterThan(240);
+    expect(next.y).toBeCloseTo(610);
+  });
+
+  it("snaps onto a close target without overshooting", () => {
+    const next = movePlayerToward(makePlayer(), { x: 242, y: 610 }, 0.5, bounds);
+    expect(next.x).toBeCloseTo(242);
+    expect(next.vx).toBe(0);
+  });
+
+  it("never steers above the player zone", () => {
+    const next = movePlayerToward(makePlayer(), { x: 240, y: 0 }, 10, bounds);
+    expect(next.y).toBe(playerZoneTop(bounds) + PLAYER_RADIUS);
   });
 });
 
 describe("bullets", () => {
-  it("fires in the facing direction", () => {
-    const bullet = fireBullet(makePlayer({ facing: { x: 1, y: 0 } }));
-    expect(bullet.vx).toBeCloseTo(BULLET_SPEED);
-    expect(bullet.vy).toBeCloseTo(0);
+  it("fires straight up from the player", () => {
+    const player = makePlayer();
+    const bullet = fireBullet(player);
+    expect(bullet.vx).toBe(0);
+    expect(bullet.vy).toBeCloseTo(-BULLET_SPEED);
+    expect(bullet.x).toBe(player.x);
+    expect(bullet.y).toBeLessThan(player.y);
   });
 
   it("advances by velocity over time", () => {
@@ -108,12 +143,22 @@ describe("bullets", () => {
   it("detects out-of-bounds bullets", () => {
     expect(bulletInBounds({ x: 10, y: 10, radius: 5, vx: 0, vy: 0 }, bounds)).toBe(true);
     expect(bulletInBounds({ x: -1, y: 10, radius: 5, vx: 0, vy: 0 }, bounds)).toBe(false);
+    expect(bulletInBounds({ x: 10, y: -100, radius: 5, vx: 0, vy: 0 }, bounds)).toBe(false);
   });
 });
 
 describe("zombies", () => {
   it("moves toward the target", () => {
-    const zombie = { x: 0, y: 0, radius: ZOMBIE_RADIUS, speed: 100, hp: 1 };
+    const zombie = {
+      x: 0,
+      y: 0,
+      radius: ZOMBIE_RADIUS,
+      speed: 100,
+      hp: 1,
+      maxHp: 1,
+      kind: "walker" as const,
+      phase: 0,
+    };
     const next = stepZombie(zombie, { x: 100, y: 0 }, 0.5);
     expect(next.x).toBeCloseTo(50);
     expect(next.y).toBeCloseTo(0);
@@ -123,9 +168,35 @@ describe("zombies", () => {
     expect(zombieSpeedForWave(2)).toBeGreaterThan(zombieSpeedForWave(1));
   });
 
-  it("spawns on an arena edge", () => {
-    // rng stubbed to 0 => top edge, x=0, y=-radius
-    const pos = spawnPosition(bounds, () => 0);
-    expect(pos).toEqual({ x: 0, y: -ZOMBIE_RADIUS });
+  it("always spawns above the top edge", () => {
+    for (const roll of [0, 0.25, 0.5, 0.99]) {
+      const pos = spawnPosition(bounds, () => roll);
+      expect(pos.y).toBeLessThan(0);
+      expect(pos.x).toBeGreaterThanOrEqual(0);
+      expect(pos.x).toBeLessThanOrEqual(bounds.width);
+    }
+  });
+
+  it("only spawns walkers on wave 1", () => {
+    for (const roll of [0, 0.3, 0.6, 0.99]) {
+      expect(zombieKindForWave(1, () => roll)).toBe("walker");
+    }
+  });
+
+  it("can spawn runners from wave 2 and brutes from wave 3", () => {
+    expect(zombieKindForWave(2, () => 0)).toBe("runner");
+    expect(zombieKindForWave(3, () => 0)).toBe("brute");
+  });
+
+  it("builds zombies with per-kind stats", () => {
+    const brute = makeZombie(bounds, 3, () => 0);
+    expect(brute.kind).toBe("brute");
+    expect(brute.hp).toBe(ZOMBIE_STATS.brute.hp);
+    expect(brute.maxHp).toBe(ZOMBIE_STATS.brute.hp);
+    expect(brute.radius).toBe(ZOMBIE_STATS.brute.radius);
+    expect(brute.speed).toBeCloseTo(
+      zombieSpeedForWave(3) * ZOMBIE_STATS.brute.speedMul,
+    );
+    expect(brute.y).toBeLessThan(0);
   });
 });
