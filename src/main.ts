@@ -13,6 +13,7 @@ const hud: HudElements = {
   score: byId("score"),
   wave: byId("wave"),
   hp: byId("hp"),
+  hpFill: byId("hp-fill"),
   overlay: byId("overlay"),
   overlayTitle: byId("overlay-title"),
   overlayText: byId("overlay-text"),

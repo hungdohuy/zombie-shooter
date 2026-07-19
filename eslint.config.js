@@ -26,6 +26,7 @@ export default [
         HTMLElement: "readonly",
         CanvasRenderingContext2D: "readonly",
         KeyboardEvent: "readonly",
+        PointerEvent: "readonly",
         console: "readonly",
       },
     },

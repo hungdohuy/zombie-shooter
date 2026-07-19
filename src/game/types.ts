@@ -9,12 +9,19 @@ export interface Circle extends Vec {
 
 export interface Player extends Circle {
   hp: number;
-  facing: Vec;
+  /** Horizontal velocity, used only for the leaning/run animation. */
+  vx: number;
 }
 
+export type ZombieKind = "walker" | "runner" | "brute";
+
 export interface Zombie extends Circle {
+  kind: ZombieKind;
   speed: number;
   hp: number;
+  maxHp: number;
+  /** Random animation phase offset so the horde doesn't move in lockstep. */
+  phase: number;
 }
 
 export interface Bullet extends Circle {
