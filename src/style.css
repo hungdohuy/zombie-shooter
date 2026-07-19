@@ -1,0 +1,130 @@
+:root {
+  --bg: #0b0f0a;
+  --panel: #121a12;
+  --accent: #7bd83a;
+  --accent-dim: #4c8a24;
+  --danger: #e5484d;
+  --text: #e6f0e0;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 0%, #16241300 0%, var(--bg) 70%),
+    var(--bg);
+  color: var(--text);
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+}
+
+.hud {
+  width: 800px;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.title {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: 4px;
+  color: var(--accent);
+  text-shadow: 0 0 12px rgba(123, 216, 58, 0.4);
+}
+
+.stats {
+  display: flex;
+  gap: 18px;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats b {
+  color: var(--accent);
+}
+
+.stage {
+  position: relative;
+  border: 2px solid var(--accent-dim);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+}
+
+canvas {
+  display: block;
+  background: #0e150c;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(6, 10, 6, 0.82);
+  text-align: center;
+  padding: 24px;
+}
+
+.overlay.hidden {
+  display: none;
+}
+
+.overlay h2 {
+  margin: 0;
+  font-size: 40px;
+  letter-spacing: 3px;
+  color: var(--accent);
+}
+
+.overlay p {
+  margin: 0;
+  font-size: 18px;
+  max-width: 460px;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  padding: 12px 32px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #06120a;
+  background: var(--accent);
+  border-radius: 6px;
+  transition: transform 0.08s ease, background 0.2s ease;
+}
+
+button:hover {
+  background: #96f04f;
+}
+
+button:active {
+  transform: scale(0.96);
+}
+
+.hint {
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.6;
+}
