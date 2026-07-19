@@ -16,6 +16,8 @@ export interface Player extends Circle {
 export type ZombieKind = "walker" | "runner" | "brute";
 
 export interface Zombie extends Circle {
+  /** Unique id so piercing bullets can remember which zombies they hit. */
+  id: number;
   kind: ZombieKind;
   speed: number;
   hp: number;
@@ -24,8 +26,22 @@ export interface Zombie extends Circle {
   phase: number;
 }
 
+export type WeaponKind = "pistol" | "shotgun" | "smg" | "rifle";
+
 export interface Bullet extends Circle {
   vx: number;
+  vy: number;
+  damage: number;
+  /** How many additional zombies this bullet may pass through after a hit. */
+  pierce: number;
+  /** Ids of zombies already damaged, so piercing rounds never re-hit one. */
+  hitIds: number[];
+  weapon: WeaponKind;
+}
+
+/** A weapon crate falling from the top of the field for the player to catch. */
+export interface ItemDrop extends Circle {
+  weapon: Exclude<WeaponKind, "pistol">;
   vy: number;
 }
 

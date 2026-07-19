@@ -51,8 +51,29 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 6px 12px;
   flex-wrap: wrap;
+}
+
+.sub-stats {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.mute-btn {
+  padding: 3px 10px;
+  font-size: clamp(10px, 2.8vw, 12px);
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--accent-dim);
+  border-radius: 5px;
+  box-shadow: none;
+}
+
+.mute-btn:hover {
+  background: rgba(123, 216, 58, 0.12);
 }
 
 .title {

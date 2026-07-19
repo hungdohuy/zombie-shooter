@@ -14,6 +14,8 @@ const hud: HudElements = {
   wave: byId("wave"),
   hp: byId("hp"),
   hpFill: byId("hp-fill"),
+  weapon: byId("weapon"),
+  ammo: byId("ammo"),
   overlay: byId("overlay"),
   overlayTitle: byId("overlay-title"),
   overlayText: byId("overlay-text"),
@@ -24,4 +26,10 @@ const startBtn = byId<HTMLButtonElement>("start-btn");
 startBtn.addEventListener("click", () => {
   game.start();
   canvas.focus();
+});
+
+const muteBtn = byId<HTMLButtonElement>("mute-btn");
+muteBtn.addEventListener("click", () => {
+  const muted = game.toggleSound();
+  muteBtn.textContent = muted ? "SOUND: OFF" : "SOUND: ON";
 });

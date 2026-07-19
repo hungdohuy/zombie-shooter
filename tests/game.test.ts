@@ -65,6 +65,8 @@ function fakeHud() {
     wave: fakeEl(),
     hp: fakeEl(),
     hpFill: fakeEl(),
+    weapon: fakeEl(),
+    ammo: fakeEl(),
     overlay: fakeEl(),
     overlayTitle: fakeEl(),
     overlayText: fakeEl(),
@@ -133,6 +135,32 @@ describe("Game loop", () => {
     for (let i = 0; i < 375; i++) frame(16); // ~6s
 
     expect(Number(hud.score.textContent)).toBeGreaterThan(0);
+    expect(Number(hud.hp.textContent)).toBeGreaterThan(0);
+  });
+
+  it("catching a weapon crate switches the gun and grants finite ammo", () => {
+    // rng 0.5 => crates and zombies both spawn horizontally centered, right
+    // above the player. The first crate drops at ~7s and falls to the player
+    // in ~6.6s more; kind roll 0.5 selects the SMG.
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+
+    const hud = fakeHud();
+    const game = new Game(fakeCanvas(), hud);
+    game.start();
+    window.dispatchEvent(new KeyboardEvent("keydown", { code: "Space" }));
+
+    const seenWeapons = new Set<string>();
+    const seenAmmo = new Set<string>();
+    for (let i = 0; i < 950; i++) {
+      frame(16); // ~15s total
+      seenWeapons.add(hud.weapon.textContent);
+      seenAmmo.add(hud.ammo.textContent);
+    }
+
+    expect(seenWeapons.has("SMG")).toBe(true);
+    // Ammo was finite while the SMG was held, and the default pistol shows ∞.
+    expect([...seenAmmo].some((a) => a !== "∞")).toBe(true);
+    expect(seenWeapons.has("PISTOL")).toBe(true);
     expect(Number(hud.hp.textContent)).toBeGreaterThan(0);
   });
 });

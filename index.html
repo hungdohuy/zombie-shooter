@@ -21,6 +21,11 @@
             <span class="hp-bar"><span id="hp-fill" class="hp-fill"></span></span>
           </span>
         </div>
+        <div class="stats sub-stats">
+          <span class="stat">Gun <b id="weapon">PISTOL</b></span>
+          <span class="stat">Ammo <b id="ammo">∞</b></span>
+          <button id="mute-btn" class="mute-btn" type="button">SOUND: ON</button>
+        </div>
       </header>
       <div class="stage">
         <canvas id="game" width="480" height="720"></canvas>
@@ -30,7 +35,9 @@
             The horde attacks from the <b>top</b> — hold the line at the
             bottom!<br />
             <b>Arrows / WASD</b> to move &nbsp;•&nbsp; <b>Space</b> to shoot<br />
-            On mobile: <b>touch &amp; drag</b> to move — you fire automatically
+            On mobile: <b>touch &amp; drag</b> to move — you fire automatically<br />
+            Catch falling <b>weapon crates</b> for shotguns, SMGs and rail
+            rifles
           </p>
           <button id="start-btn">START</button>
         </div>
