@@ -60,18 +60,29 @@ const modeBtn = byId<HTMLButtonElement>("mode-btn");
 
 function applyMode(mode: GameMode): void {
   game.setMode(mode);
-  modeBtn.textContent = mode === "mission" ? "MISSION" : "ENDLESS";
-  modeBtn.classList.toggle("chip-active", mode === "mission");
+  modeBtn.textContent = mode === "story" ? "STORY" : "ENDLESS";
+  modeBtn.classList.toggle("chip-active", mode === "story");
 }
 
-let mode: GameMode = localStorage.getItem(MODE_KEY) === "mission" ? "mission" : "endless";
+// "mission" is the pre-story name for the campaign mode; honor old saves.
+const storedMode = localStorage.getItem(MODE_KEY);
+let mode: GameMode =
+  storedMode === "story" || storedMode === "mission" ? "story" : "endless";
 applyMode(mode);
 
 modeBtn.addEventListener("click", () => {
-  mode = mode === "mission" ? "endless" : "mission";
+  mode = mode === "story" ? "endless" : "story";
   localStorage.setItem(MODE_KEY, mode);
   applyMode(mode);
 });
+
+// Story chapters change the scenery (meadow by day, graveyard by night);
+// keep the page chrome and the theme chip in sync when that happens.
+game.onThemeChange = (kind) => {
+  themeKind = kind;
+  document.body.classList.toggle("theme-night", kind === "night");
+  themeBtn.textContent = kind === "night" ? "NIGHT" : "SUNNY";
+};
 
 const AUTOFIRE_KEY = "zoombie-autofire";
 const autoFireBtn = byId<HTMLButtonElement>("autofire-btn");

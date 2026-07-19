@@ -179,30 +179,61 @@ describe("Game loop", () => {
     expect(Number(hud.hp.textContent)).toBeGreaterThan(0);
   });
 
-  it("mission mode ends with a win once the target wave is beaten", () => {
-    // rng 0.5 => zombies and crates spawn centered, straight into the
+  it("story mode plays through all chapters to the boss and the win", () => {
+    // rng 0.5 => zombies and gift boxes spawn centered, straight into the
     // player's auto-fire stream, so kills accumulate steadily.
     vi.spyOn(Math, "random").mockReturnValue(0.5);
 
     const hud = fakeHud();
     const game = new Game(fakeCanvas(), hud);
-    game.setMode("mission");
+    game.setMode("story");
     game.setAutoFire(true);
     game.start();
 
-    // Mission target is wave 5 => 50 kills. Simulate up to ~160s.
-    let won = false;
-    for (let i = 0; i < 10000 && !won; i++) {
-      frame(16);
-      won = hud.overlayTitle.textContent === "YOU WIN!";
-    }
+    /** Run frames until the overlay title matches (chapter break / win). */
+    const playUntil = (title: string): boolean => {
+      for (let i = 0; i < 20000; i++) {
+        frame(16);
+        if (hud.overlayTitle.textContent === title) return true;
+      }
+      return false;
+    };
 
-    expect(won).toBe(true);
-    expect(hud.overlayText.innerHTML).toContain("Score");
+    // Chapter 1 (3 waves) ends on the Chapter 2 cutscene.
+    expect(playUntil("CHAPTER 2")).toBe(true);
+    const scoreAfterCh1 = Number(hud.score.textContent);
+    expect(scoreAfterCh1).toBeGreaterThan(0);
+
+    // Continue keeps the score and enters chapter 2 (night theme).
+    game.start();
+    expect(playUntil("CHAPTER 3")).toBe(true);
+    expect(Number(hud.score.textContent)).toBeGreaterThan(scoreAfterCh1);
+
+    // Boss chapter: defeat the Zombie King to win the campaign.
+    game.start();
+    expect(hud.wave.textContent).toBe("BOSS!");
+    expect(playUntil("YOU WIN!")).toBe(true);
+    expect(hud.overlayText.innerHTML).toContain("Final score");
     expect(Number(hud.hp.textContent)).toBeGreaterThan(0);
-    // The loop stopped: no rAF callback stays queued after a win.
+    // The loop stopped: no rAF callback stays queued after the win.
     frame(16);
     expect(pending.length).toBe(0);
+  });
+
+  it("story game over offers a retry of the current chapter", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const hud = fakeHud();
+    const game = new Game(fakeCanvas(), hud);
+    game.setMode("story");
+    // No firing at all: the horde eventually overruns the player.
+    game.start();
+    let over = false;
+    for (let i = 0; i < 20000 && !over; i++) {
+      frame(16);
+      over = hud.overlayTitle.textContent === "OUCH!";
+    }
+    expect(over).toBe(true);
+    expect(hud.overlayText.innerHTML).toContain("CHAPTER 1");
   });
 
   it("endless mode keeps going past the mission target wave", () => {

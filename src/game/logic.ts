@@ -2,6 +2,7 @@ import type {
   Bounds,
   Bullet,
   Circle,
+  DropKind,
   InputState,
   ItemDrop,
   Player,
@@ -32,6 +33,7 @@ export const ZOMBIE_STATS: Record<
   walker: { radius: 16, speedMul: 1, hp: 1, score: 10, dps: 20 },
   runner: { radius: 12, speedMul: 1.9, hp: 1, score: 15, dps: 15 },
   brute: { radius: 26, speedMul: 0.55, hp: 4, score: 40, dps: 35 },
+  boss: { radius: 42, speedMul: 0.35, hp: 60, score: 500, dps: 45 },
 };
 
 export function clamp(value: number, min: number, max: number): number {
@@ -272,15 +274,23 @@ export function zombieSpeedForWave(wave: number): number {
   return 55 + wave * 8;
 }
 
-/** Mission mode: complete this wave to win. */
-export const MISSION_TARGET_WAVE = 5;
-
 /**
- * Mission mode victory check: the wave counter advances past the target
- * once the target wave's kill quota is met, which is the winning moment.
+ * The Zombie King: a huge, slow, high-HP boss that spawns top-center and
+ * lumbers straight down toward the player. Defeating him wins story mode.
  */
-export function missionComplete(wave: number): boolean {
-  return wave > MISSION_TARGET_WAVE;
+export function makeBoss(bounds: Bounds, id = 0): Zombie {
+  const stats = ZOMBIE_STATS.boss;
+  return {
+    id,
+    kind: "boss",
+    x: bounds.width / 2,
+    y: -stats.radius * 2,
+    radius: stats.radius,
+    speed: zombieSpeedForWave(3) * stats.speedMul,
+    hp: stats.hp,
+    maxHp: stats.hp,
+    phase: 0,
+  };
 }
 
 /**
@@ -325,25 +335,40 @@ export function makeZombie(
 
 export const ITEM_RADIUS = 13;
 export const ITEM_FALL_SPEED = 90;
+/** Chance a gift box holds a healing heart instead of a weapon. */
+export const HEART_DROP_CHANCE = 0.25;
+export const HEART_HEAL = 25;
 
-export const ITEM_WEAPONS: ItemDrop["weapon"][] = ["shotgun", "smg", "rifle"];
+export const ITEM_WEAPONS: Exclude<DropKind, "heart">[] = ["shotgun", "smg", "rifle"];
 
 /**
- * Create a weapon crate that falls from above the top edge for the player to
- * catch in the bottom zone. `rng` injectable for deterministic tests.
+ * Create a gift box that falls from above the top edge for the player to
+ * catch in the bottom zone. One rng roll decides the contents: a healing
+ * heart (low chance) or one of the pickup weapons, evenly split.
+ * `rng` injectable for deterministic tests.
  */
 export function makeItemDrop(
   bounds: Bounds,
   rng: () => number = Math.random,
 ): ItemDrop {
   const margin = ITEM_RADIUS * 3;
-  const weapon =
-    ITEM_WEAPONS[Math.min(ITEM_WEAPONS.length - 1, Math.floor(rng() * ITEM_WEAPONS.length))];
+  const roll = rng();
+  const drop: DropKind =
+    roll < HEART_DROP_CHANCE
+      ? "heart"
+      : ITEM_WEAPONS[
+          Math.min(
+            ITEM_WEAPONS.length - 1,
+            Math.floor(
+              ((roll - HEART_DROP_CHANCE) / (1 - HEART_DROP_CHANCE)) * ITEM_WEAPONS.length,
+            ),
+          )
+        ];
   return {
     x: margin + rng() * (bounds.width - margin * 2),
     y: -ITEM_RADIUS,
     radius: ITEM_RADIUS,
-    weapon,
+    drop,
     vy: ITEM_FALL_SPEED,
   };
 }

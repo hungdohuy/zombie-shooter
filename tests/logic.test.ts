@@ -11,9 +11,8 @@ import {
   ITEM_RADIUS,
   itemInBounds,
   makeItemDrop,
+  makeBoss,
   makeZombie,
-  MISSION_TARGET_WAVE,
-  missionComplete,
   movePlayer,
   movePlayerToward,
   PLAYER_RADIUS,
@@ -29,6 +28,11 @@ import {
   zombieKindForWave,
   zombieSpeedForWave,
 } from "../src/game/logic";
+import {
+  HEART_DROP_CHANCE,
+  HEART_HEAL,
+} from "../src/game/logic";
+import { STORY_CHAPTERS } from "../src/game/story";
 import { createInputState } from "../src/game/types";
 import type { Bounds, Bullet, Player } from "../src/game/types";
 
@@ -217,27 +221,54 @@ describe("weapons", () => {
   });
 });
 
-describe("mission mode", () => {
-  it("is not complete at or below the target wave", () => {
-    expect(missionComplete(1)).toBe(false);
-    expect(missionComplete(MISSION_TARGET_WAVE)).toBe(false);
+describe("story mode", () => {
+  it("defines a 3-chapter campaign ending in a boss fight", () => {
+    expect(STORY_CHAPTERS.length).toBe(3);
+    for (const ch of STORY_CHAPTERS) {
+      expect(ch.title.length).toBeGreaterThan(0);
+      expect(ch.story.length).toBeGreaterThan(0);
+      expect(["sunny", "night"]).toContain(ch.theme);
+    }
+    expect(STORY_CHAPTERS[0].boss).toBe(false);
+    expect(STORY_CHAPTERS[0].waves).toBeGreaterThan(0);
+    expect(STORY_CHAPTERS[STORY_CHAPTERS.length - 1].boss).toBe(true);
   });
 
-  it("completes once the wave counter passes the target", () => {
-    expect(missionComplete(MISSION_TARGET_WAVE + 1)).toBe(true);
+  it("builds the Zombie King with boss stats, top-center spawn", () => {
+    const boss = makeBoss(bounds, 42);
+    expect(boss.id).toBe(42);
+    expect(boss.kind).toBe("boss");
+    expect(boss.x).toBe(bounds.width / 2);
+    expect(boss.y).toBeLessThan(0);
+    expect(boss.hp).toBe(ZOMBIE_STATS.boss.hp);
+    expect(boss.maxHp).toBe(ZOMBIE_STATS.boss.hp);
+    expect(boss.hp).toBeGreaterThan(ZOMBIE_STATS.brute.hp);
+    expect(boss.speed).toBeLessThan(zombieSpeedForWave(3));
   });
 });
 
 describe("item drops", () => {
   it("spawns above the top edge within the field width", () => {
-    for (const roll of [0, 0.4, 0.99]) {
+    for (const roll of [0.3, 0.5, 0.99]) {
       const item = makeItemDrop(bounds, () => roll);
       expect(item.y).toBeLessThan(0);
       expect(item.x).toBeGreaterThanOrEqual(0);
       expect(item.x).toBeLessThanOrEqual(bounds.width);
-      expect(["shotgun", "smg", "rifle"]).toContain(item.weapon);
-      expect(item.weapon).not.toBe("pistol");
+      expect(["shotgun", "smg", "rifle"]).toContain(item.drop);
     }
+  });
+
+  it("drops a healing heart on low rolls", () => {
+    const item = makeItemDrop(bounds, () => 0.1);
+    expect(item.drop).toBe("heart");
+    expect(HEART_DROP_CHANCE).toBeGreaterThan(0.1);
+    expect(HEART_HEAL).toBeGreaterThan(0);
+  });
+
+  it("spreads weapon drops across the roll range", () => {
+    expect(makeItemDrop(bounds, () => 0.26).drop).toBe("shotgun");
+    expect(makeItemDrop(bounds, () => 0.5).drop).toBe("smg");
+    expect(makeItemDrop(bounds, () => 0.99).drop).toBe("rifle");
   });
 
   it("falls downward over time", () => {
