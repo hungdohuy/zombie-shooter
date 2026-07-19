@@ -424,9 +424,9 @@ export class Game {
 
     // Night sky fading into the killing field.
     const sky = ctx.createLinearGradient(0, 0, 0, bounds.height);
-    sky.addColorStop(0, "#131020");
-    sky.addColorStop(0.45, "#101809");
-    sky.addColorStop(1, "#0c130a");
+    sky.addColorStop(0, "#1b1830");
+    sky.addColorStop(0.45, "#17220e");
+    sky.addColorStop(1, "#121c0f");
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, bounds.width, bounds.height);
 
@@ -491,7 +491,7 @@ export class Game {
       ctx.beginPath();
       ctx.ellipse(g.x, g.y + g.h, g.w * 0.7, 4, 0, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "#2c3530";
+      ctx.fillStyle = "#39463e";
       ctx.beginPath();
       ctx.moveTo(g.x - g.w / 2, g.y + g.h);
       ctx.lineTo(g.x - g.w / 2, g.y + g.w / 2);
@@ -500,7 +500,7 @@ export class Game {
       ctx.closePath();
       ctx.fill();
       if (g.cross) {
-        ctx.strokeStyle = "#1d2420";
+        ctx.strokeStyle = "#242e28";
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(g.x, g.y + g.w / 2 - 2);
@@ -722,7 +722,7 @@ export class Game {
       bounds.height * 0.75,
     );
     v.addColorStop(0, "rgba(0, 0, 0, 0)");
-    v.addColorStop(1, "rgba(0, 0, 0, 0.45)");
+    v.addColorStop(1, "rgba(0, 0, 0, 0.3)");
     ctx.fillStyle = v;
     ctx.fillRect(0, 0, bounds.width, bounds.height);
 
