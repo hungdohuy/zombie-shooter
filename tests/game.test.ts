@@ -164,6 +164,21 @@ describe("Game loop", () => {
     expect(Number(hud.hp.textContent)).toBeGreaterThan(0);
   });
 
+  it("auto-fire scores kills without any shoot input", () => {
+    // rng 0.5 => zombies spawn centered, directly up-range of the player.
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+
+    const hud = fakeHud();
+    const game = new Game(fakeCanvas(), hud);
+    game.setAutoFire(true);
+    game.start();
+    // No keyboard or touch input at all — auto-fire does the shooting.
+    for (let i = 0; i < 375; i++) frame(16); // ~6s
+
+    expect(Number(hud.score.textContent)).toBeGreaterThan(0);
+    expect(Number(hud.hp.textContent)).toBeGreaterThan(0);
+  });
+
   it("switches themes mid-game without breaking the loop", () => {
     const hud = fakeHud();
     const game = new Game(fakeCanvas(), hud);

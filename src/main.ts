@@ -53,3 +53,21 @@ themeBtn.addEventListener("click", () => {
   localStorage.setItem(THEME_KEY, themeKind);
   applyTheme(themeKind);
 });
+
+const AUTOFIRE_KEY = "zoombie-autofire";
+const autoFireBtn = byId<HTMLButtonElement>("autofire-btn");
+
+function applyAutoFire(on: boolean): void {
+  game.setAutoFire(on);
+  autoFireBtn.textContent = on ? "AUTO: ON" : "AUTO: OFF";
+  autoFireBtn.classList.toggle("chip-active", on);
+}
+
+let autoFire = localStorage.getItem(AUTOFIRE_KEY) === "on";
+applyAutoFire(autoFire);
+
+autoFireBtn.addEventListener("click", () => {
+  autoFire = !autoFire;
+  localStorage.setItem(AUTOFIRE_KEY, autoFire ? "on" : "off");
+  applyAutoFire(autoFire);
+});
