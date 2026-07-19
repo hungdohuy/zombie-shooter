@@ -50,6 +50,8 @@ export interface Bounds {
   height: number;
 }
 
+export type GameMode = "endless" | "mission";
+
 export interface InputState {
   up: boolean;
   down: boolean;

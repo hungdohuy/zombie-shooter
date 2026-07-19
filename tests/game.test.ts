@@ -179,6 +179,47 @@ describe("Game loop", () => {
     expect(Number(hud.hp.textContent)).toBeGreaterThan(0);
   });
 
+  it("mission mode ends with a win once the target wave is beaten", () => {
+    // rng 0.5 => zombies and crates spawn centered, straight into the
+    // player's auto-fire stream, so kills accumulate steadily.
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+
+    const hud = fakeHud();
+    const game = new Game(fakeCanvas(), hud);
+    game.setMode("mission");
+    game.setAutoFire(true);
+    game.start();
+
+    // Mission target is wave 5 => 50 kills. Simulate up to ~160s.
+    let won = false;
+    for (let i = 0; i < 10000 && !won; i++) {
+      frame(16);
+      won = hud.overlayTitle.textContent === "YOU WIN!";
+    }
+
+    expect(won).toBe(true);
+    expect(hud.overlayText.innerHTML).toContain("Score");
+    expect(Number(hud.hp.textContent)).toBeGreaterThan(0);
+    // The loop stopped: no rAF callback stays queued after a win.
+    frame(16);
+    expect(pending.length).toBe(0);
+  });
+
+  it("endless mode keeps going past the mission target wave", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+
+    const hud = fakeHud();
+    const game = new Game(fakeCanvas(), hud);
+    game.setAutoFire(true); // default endless mode
+    game.start();
+    for (let i = 0; i < 10000; i++) {
+      frame(16);
+      if (Number(hud.wave.textContent) > 5) break;
+    }
+    expect(Number(hud.wave.textContent)).toBeGreaterThan(5);
+    expect(hud.overlayTitle.textContent).not.toBe("YOU WIN!");
+  });
+
   it("switches themes mid-game without breaking the loop", () => {
     const hud = fakeHud();
     const game = new Game(fakeCanvas(), hud);

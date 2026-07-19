@@ -2,6 +2,7 @@ import "./style.css";
 import { Game } from "./game/game";
 import type { HudElements } from "./game/game";
 import type { ThemeKind } from "./game/theme";
+import type { GameMode } from "./game/types";
 
 function byId<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -52,6 +53,24 @@ themeBtn.addEventListener("click", () => {
   themeKind = themeKind === "night" ? "sunny" : "night";
   localStorage.setItem(THEME_KEY, themeKind);
   applyTheme(themeKind);
+});
+
+const MODE_KEY = "zoombie-mode";
+const modeBtn = byId<HTMLButtonElement>("mode-btn");
+
+function applyMode(mode: GameMode): void {
+  game.setMode(mode);
+  modeBtn.textContent = mode === "mission" ? "MISSION" : "ENDLESS";
+  modeBtn.classList.toggle("chip-active", mode === "mission");
+}
+
+let mode: GameMode = localStorage.getItem(MODE_KEY) === "mission" ? "mission" : "endless";
+applyMode(mode);
+
+modeBtn.addEventListener("click", () => {
+  mode = mode === "mission" ? "endless" : "mission";
+  localStorage.setItem(MODE_KEY, mode);
+  applyMode(mode);
 });
 
 const AUTOFIRE_KEY = "zoombie-autofire";

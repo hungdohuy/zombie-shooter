@@ -12,6 +12,8 @@ import {
   itemInBounds,
   makeItemDrop,
   makeZombie,
+  MISSION_TARGET_WAVE,
+  missionComplete,
   movePlayer,
   movePlayerToward,
   PLAYER_RADIUS,
@@ -212,6 +214,17 @@ describe("weapons", () => {
         WEAPONS.smg.spread / 2 + 1e-9,
       );
     }
+  });
+});
+
+describe("mission mode", () => {
+  it("is not complete at or below the target wave", () => {
+    expect(missionComplete(1)).toBe(false);
+    expect(missionComplete(MISSION_TARGET_WAVE)).toBe(false);
+  });
+
+  it("completes once the wave counter passes the target", () => {
+    expect(missionComplete(MISSION_TARGET_WAVE + 1)).toBe(true);
   });
 });
 
