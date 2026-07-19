@@ -32,7 +32,8 @@ export interface HudElements {
 
 const FIRE_COOLDOWN = 0.18; // seconds between shots
 const SPAWN_INTERVAL_BASE = 1.6;
-const CONTACT_DPS = 34; // player HP lost per second while a zombie touches you
+const CONTACT_DPS = 20; // player HP lost per second while a zombie touches you
+const START_GRACE = 1.2; // seconds before the first zombie spawns
 
 export class Game {
   private ctx: CanvasRenderingContext2D;
@@ -89,7 +90,7 @@ export class Game {
     this.score = 0;
     this.wave = 1;
     this.kills = 0;
-    this.spawnTimer = 0;
+    this.spawnTimer = START_GRACE;
     this.fireTimer = 0;
     this.input = createInputState();
     this.updateHud();
