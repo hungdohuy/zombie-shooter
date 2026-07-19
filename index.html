@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Zoombie Shooter</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="hud">
+        <h1 class="title">ZOOMBIE&nbsp;SHOOTER</h1>
+        <div class="stats">
+          <span>Score: <b id="score">0</b></span>
+          <span>Wave: <b id="wave">1</b></span>
+          <span>HP: <b id="hp">100</b></span>
+        </div>
+      </header>
+      <div class="stage">
+        <canvas id="game" width="800" height="600"></canvas>
+        <div id="overlay" class="overlay">
+          <h2 id="overlay-title">ZOOMBIE SHOOTER</h2>
+          <p id="overlay-text">
+            Move with the <b>Arrow Keys</b> &nbsp;•&nbsp; Shoot with
+            <b>Space</b>
+          </p>
+          <button id="start-btn">START</button>
+        </div>
+      </div>
+      <p class="hint">Arrow keys to move · Space to shoot · Survive the horde</p>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
