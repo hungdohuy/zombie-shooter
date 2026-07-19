@@ -49,6 +49,7 @@ export class Game {
   private running = false;
   private lastTime = 0;
   private rafId = 0;
+  private loopId = 0;
 
   constructor(
     canvas: HTMLCanvasElement,
@@ -95,11 +96,16 @@ export class Game {
   }
 
   start(): void {
+    // Invalidate any loop already scheduled so a second START press can't
+    // stack a second animation loop (which would double spawns and damage).
+    cancelAnimationFrame(this.rafId);
+    this.loopId += 1;
     this.reset();
     this.hud.overlay.classList.add("hidden");
     this.running = true;
     this.lastTime = performance.now();
-    this.loop(this.lastTime);
+    const activeLoop = this.loopId;
+    this.rafId = requestAnimationFrame((now) => this.loop(now, activeLoop));
   }
 
   private gameOver(): void {
@@ -110,13 +116,14 @@ export class Game {
     this.hud.overlay.classList.remove("hidden");
   }
 
-  private loop = (now: number): void => {
-    if (!this.running) return;
+  private loop = (now: number, loopId: number): void => {
+    // Stop if the game ended or a newer loop generation has taken over.
+    if (!this.running || loopId !== this.loopId) return;
     const dt = Math.min(0.05, (now - this.lastTime) / 1000);
     this.lastTime = now;
     this.update(dt);
     this.render();
-    this.rafId = requestAnimationFrame(this.loop);
+    this.rafId = requestAnimationFrame((next) => this.loop(next, loopId));
   };
 
   private update(dt: number): void {
