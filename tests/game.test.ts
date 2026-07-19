@@ -163,4 +163,24 @@ describe("Game loop", () => {
     expect(seenWeapons.has("PISTOL")).toBe(true);
     expect(Number(hud.hp.textContent)).toBeGreaterThan(0);
   });
+
+  it("switches themes mid-game without breaking the loop", () => {
+    const hud = fakeHud();
+    const game = new Game(fakeCanvas(), hud);
+    game.setTheme("night"); // idle re-render
+    game.start();
+    for (let i = 0; i < 30; i++) frame(16);
+    game.setTheme("sunny"); // live switch
+    for (let i = 0; i < 30; i++) frame(16);
+    expect(pending.length).toBe(1);
+    expect(Number(hud.hp.textContent)).toBeGreaterThan(0);
+  });
+
+  it("scales the canvas backing store by devicePixelRatio (capped at 2)", () => {
+    vi.stubGlobal("devicePixelRatio", 3);
+    const canvas = fakeCanvas();
+    new Game(canvas, fakeHud());
+    expect(canvas.width).toBe(960); // 480 × capped dpr 2
+    expect(canvas.height).toBe(1440); // 720 × capped dpr 2
+  });
 });

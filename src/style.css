@@ -1,14 +1,47 @@
 :root {
-  --bg: #8fd3ff;
-  --accent: #ff5da2;
-  --accent-dim: #ff9ecb;
-  --sun: #ffd93d;
-  --grass: #6bcb77;
-  --sky: #4d96ff;
-  --danger: #ff6b6b;
+  --page-bg: linear-gradient(180deg, #8fd3ff 0%, #c3ecff 45%, #d9f8c9 100%);
   --text: #1c3d5a;
+  --accent: #ff5da2;
+  --accent-soft: #ff9ecb;
+  --title-grad: linear-gradient(90deg, #ff6b6b, #ff9f43, #ffd93d, #6bcb77, #4d96ff, #b17ae0);
+  --title-stroke: rgba(28, 61, 90, 0.25);
+  --overlay-bg: rgba(255, 255, 255, 0.88);
+  --stage-border: #ffffff;
+  --stage-shadow: 0 8px 24px rgba(77, 150, 255, 0.35), 0 0 0 3px rgba(255, 93, 162, 0.35);
+  --canvas-bg: #aee9ff;
+  --hp-back: rgba(255, 255, 255, 0.7);
+  --hp-border: rgba(28, 61, 90, 0.15);
+  --btn-top: #ff7bb5;
+  --btn-bottom: #ff5da2;
+  --btn-3d: #d6437f;
+  --btn-glow: rgba(255, 93, 162, 0.4);
+  --btn-text: #ffffff;
+  --chip-bg: #ffffff;
+  --chip-hover: #fff0f7;
   font-family: "Comic Sans MS", "Comic Neue", "Chalkboard SE", "Segoe UI",
     system-ui, sans-serif;
+}
+
+body.theme-night {
+  --page-bg: linear-gradient(180deg, #131a2c 0%, #0e1710 55%, #0b0f0a 100%);
+  --text: #e6f0e0;
+  --accent: #7bd83a;
+  --accent-soft: #4c8a24;
+  --title-grad: linear-gradient(90deg, #7bd83a, #c3f36a, #7bd83a);
+  --title-stroke: rgba(0, 0, 0, 0.4);
+  --overlay-bg: rgba(6, 10, 6, 0.85);
+  --stage-border: #4c8a24;
+  --stage-shadow: 0 0 40px rgba(0, 0, 0, 0.6);
+  --canvas-bg: #0e150c;
+  --hp-back: rgba(255, 255, 255, 0.12);
+  --hp-border: rgba(255, 255, 255, 0.1);
+  --btn-top: #8ee24f;
+  --btn-bottom: #6cc32d;
+  --btn-3d: #3f7d18;
+  --btn-glow: rgba(123, 216, 58, 0.35);
+  --btn-text: #06120a;
+  --chip-bg: #121a12;
+  --chip-hover: #1c2a1a;
 }
 
 * {
@@ -26,7 +59,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(180deg, #8fd3ff 0%, #c3ecff 45%, #d9f8c9 100%);
+  background: var(--page-bg);
   color: var(--text);
   overflow: hidden;
   /* Don't let touch drags scroll/zoom the page while playing. */
@@ -62,31 +95,41 @@ body {
   justify-content: space-between;
 }
 
-.mute-btn {
+.chip-row {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.chip-btn {
   padding: 3px 12px;
   font-size: clamp(10px, 2.8vw, 12px);
   font-weight: 700;
   letter-spacing: 1px;
   color: var(--accent);
-  background: #ffffff;
-  border: 2px solid var(--accent-dim);
+  background: var(--chip-bg);
+  border: 2px solid var(--accent-soft);
   border-radius: 999px;
-  box-shadow: 0 2px 0 rgba(255, 93, 162, 0.25);
+  box-shadow: none;
 }
 
-.mute-btn:hover {
-  background: #fff0f7;
+.chip-btn:hover {
+  background: var(--chip-hover);
+}
+
+.chip-btn:active {
+  transform: scale(0.96);
+  box-shadow: none;
 }
 
 .title {
   margin: 0;
   font-size: clamp(16px, 4.5vw, 24px);
   letter-spacing: 2px;
-  background: linear-gradient(90deg, #ff6b6b, #ff9f43, #ffd93d, #6bcb77, #4d96ff, #b17ae0);
+  background: var(--title-grad);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  -webkit-text-stroke: 0.5px rgba(28, 61, 90, 0.25);
+  -webkit-text-stroke: 0.5px var(--title-stroke);
   white-space: nowrap;
 }
 
@@ -114,8 +157,8 @@ body {
   width: clamp(48px, 14vw, 80px);
   height: 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(28, 61, 90, 0.15);
+  background: var(--hp-back);
+  border: 1px solid var(--hp-border);
   overflow: hidden;
 }
 
@@ -134,11 +177,10 @@ body {
 
 .stage {
   position: relative;
-  border: 4px solid #ffffff;
+  border: 4px solid var(--stage-border);
   border-radius: 18px;
   overflow: hidden;
-  box-shadow: 0 8px 24px rgba(77, 150, 255, 0.35),
-    0 0 0 3px rgba(255, 93, 162, 0.35);
+  box-shadow: var(--stage-shadow);
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
@@ -152,9 +194,11 @@ body {
 
 canvas {
   display: block;
+  /* The canvas backing store is sized in JS (logical 480x720 × DPR); CSS
+     scales it to the stage box, preserving the 2:3 ratio via the stage. */
   width: 100%;
   height: 100%;
-  background: #aee9ff;
+  background: var(--canvas-bg);
   touch-action: none;
   cursor: crosshair;
 }
@@ -167,7 +211,7 @@ canvas {
   align-items: center;
   justify-content: center;
   gap: 14px;
-  background: rgba(255, 255, 255, 0.88);
+  background: var(--overlay-bg);
   backdrop-filter: blur(3px);
   text-align: center;
   padding: 24px;
@@ -181,11 +225,11 @@ canvas {
   margin: 0;
   font-size: clamp(26px, 8vw, 40px);
   letter-spacing: 2px;
-  background: linear-gradient(90deg, #ff6b6b, #ff9f43, #ffd93d, #6bcb77, #4d96ff, #b17ae0);
+  background: var(--title-grad);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  -webkit-text-stroke: 1px rgba(28, 61, 90, 0.2);
+  -webkit-text-stroke: 1px var(--title-stroke);
 }
 
 .overlay p {
@@ -208,21 +252,21 @@ button {
   font-weight: 700;
   font-family: inherit;
   letter-spacing: 2px;
-  color: #ffffff;
-  background: linear-gradient(180deg, #ff7bb5, #ff5da2);
+  color: var(--btn-text);
+  background: linear-gradient(180deg, var(--btn-top), var(--btn-bottom));
   border-radius: 999px;
-  box-shadow: 0 5px 0 #d6437f, 0 8px 18px rgba(255, 93, 162, 0.4);
+  box-shadow: 0 5px 0 var(--btn-3d), 0 8px 18px var(--btn-glow);
   transition: transform 0.08s ease, box-shadow 0.08s ease;
   touch-action: manipulation;
 }
 
 button:hover {
-  background: linear-gradient(180deg, #ff8fc0, #ff6fae);
+  filter: brightness(1.06);
 }
 
 button:active {
   transform: translateY(3px);
-  box-shadow: 0 2px 0 #d6437f, 0 4px 10px rgba(255, 93, 162, 0.4);
+  box-shadow: 0 2px 0 var(--btn-3d), 0 4px 10px var(--btn-glow);
 }
 
 .hint {
