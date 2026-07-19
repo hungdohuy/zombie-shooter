@@ -150,8 +150,10 @@ export class SoundManager {
     this.tone({ type: "sine", from: 659, dur: 0.2, vol: 0.22, delay: 0.2 });
   }
 
+  /** A playful "wah-wah-waaah" instead of a scary crash. */
   gameOver(): void {
-    this.tone({ type: "sawtooth", from: 320, to: 40, dur: 0.9, vol: 0.3 });
-    this.tone({ type: "sine", from: 160, to: 30, dur: 1.1, vol: 0.25, delay: 0.15 });
+    this.tone({ type: "triangle", from: 392, to: 370, dur: 0.25, vol: 0.22 });
+    this.tone({ type: "triangle", from: 349, to: 330, dur: 0.25, vol: 0.22, delay: 0.28 });
+    this.tone({ type: "triangle", from: 311, to: 220, dur: 0.7, vol: 0.24, delay: 0.56 });
   }
 }
