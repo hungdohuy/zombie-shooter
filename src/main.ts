@@ -36,7 +36,7 @@ muteBtn.addEventListener("click", () => {
   muteBtn.textContent = muted ? "SOUND: OFF" : "SOUND: ON";
 });
 
-const THEME_KEY = "zoombie-theme";
+const THEME_KEY = "zombie-theme";
 const themeBtn = byId<HTMLButtonElement>("theme-btn");
 
 function applyTheme(kind: ThemeKind): void {
@@ -55,7 +55,7 @@ themeBtn.addEventListener("click", () => {
   applyTheme(themeKind);
 });
 
-const MODE_KEY = "zoombie-mode";
+const MODE_KEY = "zombie-mode";
 const modeBtn = byId<HTMLButtonElement>("mode-btn");
 
 function applyMode(mode: GameMode): void {
@@ -84,7 +84,7 @@ game.onThemeChange = (kind) => {
   themeBtn.textContent = kind === "night" ? "NIGHT" : "SUNNY";
 };
 
-const AUTOFIRE_KEY = "zoombie-autofire";
+const AUTOFIRE_KEY = "zombie-autofire";
 const autoFireBtn = byId<HTMLButtonElement>("autofire-btn");
 
 function applyAutoFire(on: boolean): void {
