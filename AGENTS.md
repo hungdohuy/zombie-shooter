@@ -13,6 +13,7 @@ A web-based vertical zombie shooter game. Zombies spawn at the **top** of the po
 
 - `src/game/logic.ts` — pure, side-effect-free game logic (movement, collisions, spawning, weapons, item drops). This is what the unit tests cover.
 - `src/game/game.ts` — the `Game` class: input handling, the requestAnimationFrame loop, and canvas rendering.
+- `src/game/draw3d.ts` — faux-3D object view helpers (shaded spheres, ellipsoids, capsules, boxes) used by the canvas renderer so player, zombies, crates, bullets, and scenery read as solid lit objects under a shared key light.
 - `src/game/audio.ts` — `SoundManager`: all sound effects are synthesized with the Web Audio API (no audio asset files). The AudioContext is created lazily in `unlock()` from the START click (browser autoplay policy) and every method no-ops when audio is unavailable (e.g. jsdom).
 - `src/game/theme.ts` — the visual theme system: a `Theme` interface plus two palettes, `sunny` (bright kid-friendly meadow) and `night` (dark graveyard). `Game.setTheme()` switches canvas rendering; `main.ts` toggles the matching `body.theme-night` CSS-variable set and persists the choice in `localStorage` (`zombie-theme`). Bullets always render with a contrasting outline ring + halo from the theme's `bullets` styles so they stay visible on any background.
 - `src/game/types.ts` — shared types.
