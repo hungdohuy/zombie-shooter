@@ -18,6 +18,16 @@ import {
   ZOMBIE_STATS,
 } from "./logic";
 import { SoundManager } from "./audio";
+import {
+  drawBow3d,
+  drawBox3d,
+  drawCapsule,
+  drawContactShadow,
+  drawEllipsoid,
+  drawHeart3d,
+  drawSphere,
+  shade,
+} from "./draw3d";
 import { STORY_CHAPTERS, STORY_WIN } from "./story";
 import { THEMES } from "./theme";
 import type { Theme, ThemeKind } from "./theme";
@@ -749,7 +759,7 @@ export class Game {
     const sx = bounds.width * 0.82;
     const sy = bounds.height * 0.09;
     if (theme.celestial === "sun") {
-      // Smiling sun with slowly turning rays.
+      // 3D sun ball with slowly turning ray spikes.
       ctx.save();
       ctx.translate(sx, sy);
       ctx.rotate(this.elapsed * 0.25);
@@ -764,10 +774,7 @@ export class Game {
         ctx.stroke();
       }
       ctx.restore();
-      ctx.fillStyle = "#ffd93d";
-      ctx.beginPath();
-      ctx.arc(sx, sy, 22, 0, Math.PI * 2);
-      ctx.fill();
+      drawSphere(ctx, sx, sy, 22, "#ffd93d", "#e8a900");
       ctx.fillStyle = "#e8590c";
       ctx.beginPath();
       ctx.arc(sx - 7, sy - 4, 2.6, 0, Math.PI * 2);
@@ -779,17 +786,14 @@ export class Game {
       ctx.arc(sx, sy + 3, 9, 0.25, Math.PI - 0.25);
       ctx.stroke();
     } else {
-      // Moon with a soft glow and craters.
+      // 3D moon ball with a soft glow and crater dimples.
       const glow = ctx.createRadialGradient(sx, sy, 4, sx, sy, 70);
       glow.addColorStop(0, "rgba(226, 235, 200, 0.55)");
       glow.addColorStop(1, "rgba(226, 235, 200, 0)");
       ctx.fillStyle = glow;
       ctx.fillRect(sx - 70, sy - 70, 140, 140);
-      ctx.fillStyle = "#e7ecd2";
-      ctx.beginPath();
-      ctx.arc(sx, sy, 20, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = "rgba(190, 198, 168, 0.6)";
+      drawSphere(ctx, sx, sy, 20, "#e7ecd2", "#b8c0a0");
+      ctx.fillStyle = "rgba(120, 130, 100, 0.35)";
       ctx.beginPath();
       ctx.arc(sx - 6, sy - 4, 4, 0, Math.PI * 2);
       ctx.arc(sx + 7, sy + 6, 3, 0, Math.PI * 2);
@@ -853,16 +857,22 @@ export class Game {
       for (const d of this.decorations) {
         const w = d.size * 2;
         const h = d.size * 2.4;
-        ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
-        ctx.beginPath();
-        ctx.ellipse(d.x, d.y + h * 0.5, w * 0.7, 4, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = "#39463e";
+        drawContactShadow(ctx, d.x, d.y + h * 0.5, w * 0.7, 4, "rgba(0, 0, 0, 0.35)");
+        // Extruded tombstone slab (front + lit top edge).
+        ctx.fillStyle = shade("#39463e", -0.15);
         ctx.beginPath();
         ctx.moveTo(d.x - w / 2, d.y + h * 0.5);
         ctx.lineTo(d.x - w / 2, d.y - h * 0.2);
         ctx.arc(d.x, d.y - h * 0.2, w / 2, Math.PI, 0);
         ctx.lineTo(d.x + w / 2, d.y + h * 0.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = shade("#39463e", 0.25);
+        ctx.beginPath();
+        ctx.moveTo(d.x - w / 2, d.y - h * 0.2);
+        ctx.arc(d.x, d.y - h * 0.2, w / 2, Math.PI, 0);
+        ctx.lineTo(d.x + w / 2 - 3, d.y - h * 0.28);
+        ctx.arc(d.x, d.y - h * 0.28, w / 2 - 3, 0, Math.PI, true);
         ctx.closePath();
         ctx.fill();
         if (d.kind === "flower") {
@@ -880,59 +890,31 @@ export class Game {
     }
     for (const d of this.decorations) {
       const s = d.size;
-      ctx.fillStyle = "rgba(0, 90, 30, 0.12)";
-      ctx.beginPath();
-      ctx.ellipse(d.x, d.y + s, s, s * 0.35, 0, 0, Math.PI * 2);
-      ctx.fill();
+      drawContactShadow(ctx, d.x, d.y + s, s, s * 0.35, "rgba(0, 90, 30, 0.12)");
       if (d.kind === "flower") {
-        ctx.strokeStyle = "#2f9e44";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(d.x, d.y + s);
-        ctx.lineTo(d.x, d.y - s * 0.2);
-        ctx.stroke();
-        ctx.fillStyle = d.color;
+        drawCapsule(ctx, d.x, d.y + s, d.x, d.y - s * 0.2, 1.4, "#2f9e44");
         for (let i = 0; i < 5; i++) {
           const a = (i / 5) * Math.PI * 2 + this.elapsed * 0.15;
-          ctx.beginPath();
-          ctx.arc(
+          drawSphere(
+            ctx,
             d.x + Math.cos(a) * s * 0.45,
             d.y - s * 0.2 + Math.sin(a) * s * 0.45,
             s * 0.32,
-            0,
-            Math.PI * 2,
+            d.color,
           );
-          ctx.fill();
         }
-        ctx.fillStyle = "#ffd93d";
-        ctx.beginPath();
-        ctx.arc(d.x, d.y - s * 0.2, s * 0.26, 0, Math.PI * 2);
-        ctx.fill();
+        drawSphere(ctx, d.x, d.y - s * 0.2, s * 0.26, "#ffd93d");
       } else if (d.kind === "mushroom") {
-        ctx.fillStyle = "#fff4e6";
-        ctx.fillRect(d.x - s * 0.22, d.y - s * 0.1, s * 0.44, s * 1.05);
-        ctx.fillStyle = "#ff6b6b";
-        ctx.beginPath();
-        ctx.arc(d.x, d.y - s * 0.05, s * 0.8, Math.PI, 0);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = "#fff";
-        ctx.beginPath();
-        ctx.arc(d.x - s * 0.3, d.y - s * 0.35, s * 0.13, 0, Math.PI * 2);
-        ctx.arc(d.x + s * 0.25, d.y - s * 0.5, s * 0.11, 0, Math.PI * 2);
-        ctx.fill();
+        drawCapsule(ctx, d.x, d.y + s * 0.85, d.x, d.y - s * 0.05, s * 0.22, "#fff4e6", "#e8d5b8");
+        drawEllipsoid(ctx, d.x, d.y - s * 0.15, s * 0.8, s * 0.45, "#ff6b6b", "#d6336c");
+        drawSphere(ctx, d.x - s * 0.3, d.y - s * 0.35, s * 0.13, "#ffffff");
+        drawSphere(ctx, d.x + s * 0.25, d.y - s * 0.5, s * 0.11, "#ffffff");
       } else {
-        ctx.fillStyle = "#4cae4f";
-        ctx.beginPath();
-        ctx.arc(d.x - s * 0.5, d.y, s * 0.55, 0, Math.PI * 2);
-        ctx.arc(d.x + s * 0.4, d.y - s * 0.1, s * 0.65, 0, Math.PI * 2);
-        ctx.arc(d.x, d.y - s * 0.45, s * 0.55, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = "#ff8787";
-        ctx.beginPath();
-        ctx.arc(d.x + s * 0.3, d.y - s * 0.4, s * 0.16, 0, Math.PI * 2);
-        ctx.arc(d.x - s * 0.4, d.y - s * 0.15, s * 0.14, 0, Math.PI * 2);
-        ctx.fill();
+        drawSphere(ctx, d.x - s * 0.5, d.y, s * 0.55, "#4cae4f", "#2f9e44");
+        drawSphere(ctx, d.x + s * 0.4, d.y - s * 0.1, s * 0.65, "#4cae4f", "#2f9e44");
+        drawSphere(ctx, d.x, d.y - s * 0.45, s * 0.55, "#5cb85f", "#2f9e44");
+        drawSphere(ctx, d.x + s * 0.3, d.y - s * 0.4, s * 0.16, "#ff8787");
+        drawSphere(ctx, d.x - s * 0.4, d.y - s * 0.15, s * 0.14, "#ff8787");
       }
     }
   }
@@ -945,61 +927,39 @@ export class Game {
     const wobble = Math.sin(this.elapsed * wobbleSpeed + z.phase) * 0.16;
     const armSwing = Math.sin(this.elapsed * wobbleSpeed + z.phase);
 
-    // Soft ground shadow.
-    ctx.fillStyle = theme.shadow;
-    ctx.beginPath();
-    ctx.ellipse(z.x, z.y + z.radius * 0.75, z.radius * 0.95, z.radius * 0.4, 0, 0, Math.PI * 2);
-    ctx.fill();
+    drawContactShadow(
+      ctx,
+      z.x,
+      z.y + z.radius * 0.75,
+      z.radius * 0.95,
+      z.radius * 0.4,
+      theme.shadow,
+    );
 
     ctx.save();
     ctx.translate(z.x, z.y);
     ctx.rotate(angle + wobble);
 
-    // Outstretched wobbly arms.
-    ctx.strokeStyle = skin.body;
-    ctx.lineCap = "round";
-    ctx.lineWidth = z.radius * 0.42;
-    ctx.beginPath();
-    ctx.moveTo(z.radius * 0.2, -z.radius * 0.55);
-    ctx.lineTo(z.radius * (1.4 + armSwing * 0.18), -z.radius * 0.45);
-    ctx.moveTo(z.radius * 0.2, z.radius * 0.55);
-    ctx.lineTo(z.radius * (1.4 - armSwing * 0.18), z.radius * 0.45);
-    ctx.stroke();
-    // Hands.
-    ctx.fillStyle = skin.head;
-    ctx.beginPath();
-    ctx.arc(z.radius * (1.4 + armSwing * 0.18), -z.radius * 0.45, z.radius * 0.24, 0, Math.PI * 2);
-    ctx.arc(z.radius * (1.4 - armSwing * 0.18), z.radius * 0.45, z.radius * 0.24, 0, Math.PI * 2);
-    ctx.fill();
+    // Outstretched 3D arm capsules + hand spheres.
+    const armR = z.radius * 0.2;
+    const handA = z.radius * (1.4 + armSwing * 0.18);
+    const handB = z.radius * (1.4 - armSwing * 0.18);
+    drawCapsule(ctx, z.radius * 0.2, -z.radius * 0.55, handA, -z.radius * 0.45, armR, skin.body, skin.outline);
+    drawCapsule(ctx, z.radius * 0.2, z.radius * 0.55, handB, z.radius * 0.45, armR, skin.body, skin.outline);
+    drawSphere(ctx, handA, -z.radius * 0.45, z.radius * 0.24, skin.head, skin.outline);
+    drawSphere(ctx, handB, z.radius * 0.45, z.radius * 0.24, skin.head, skin.outline);
 
-    // Round cartoon torso with an outline and a lighter belly.
-    ctx.fillStyle = skin.body;
-    ctx.strokeStyle = skin.outline;
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, z.radius, z.radius * 0.86, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = skin.belly;
-    ctx.beginPath();
-    ctx.ellipse(-z.radius * 0.2, 0, z.radius * 0.45, z.radius * 0.5, 0, 0, Math.PI * 2);
-    ctx.fill();
+    // Round 3D torso + lighter belly volume.
+    drawEllipsoid(ctx, 0, 0, z.radius, z.radius * 0.86, skin.body, skin.outline);
+    drawEllipsoid(ctx, -z.radius * 0.2, 0, z.radius * 0.45, z.radius * 0.5, skin.belly);
 
-    // Head leaning toward the player.
-    ctx.fillStyle = skin.head;
-    ctx.strokeStyle = skin.outline;
-    ctx.beginPath();
-    ctx.arc(z.radius * 0.45, 0, z.radius * 0.62, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
+    // Head sphere leaning toward the player.
+    drawSphere(ctx, z.radius * 0.45, 0, z.radius * 0.62, skin.head, skin.outline);
 
-    // Big googly eyes with wandering pupils.
+    // Big googly eyes with wandering pupils (flat discs on the sphere).
     const look = Math.sin(this.elapsed * 3 + z.phase) * z.radius * 0.05;
-    ctx.fillStyle = theme.eyeWhite;
-    ctx.beginPath();
-    ctx.arc(z.radius * 0.72, -z.radius * 0.26, z.radius * 0.22, 0, Math.PI * 2);
-    ctx.arc(z.radius * 0.72, z.radius * 0.26, z.radius * 0.19, 0, Math.PI * 2);
-    ctx.fill();
+    drawSphere(ctx, z.radius * 0.72, -z.radius * 0.26, z.radius * 0.22, theme.eyeWhite);
+    drawSphere(ctx, z.radius * 0.72, z.radius * 0.26, z.radius * 0.19, theme.eyeWhite);
     ctx.fillStyle = theme.pupil;
     ctx.beginPath();
     ctx.arc(z.radius * 0.82, -z.radius * 0.26 + look, z.radius * 0.1, 0, Math.PI * 2);
@@ -1015,11 +975,11 @@ export class Game {
 
     ctx.restore();
 
-    // A golden crown for the Zombie King.
+    // A golden 3D crown for the Zombie King.
     if (z.kind === "boss") {
       const cw = z.radius * 0.9;
       const cy = z.y - z.radius - 4;
-      ctx.fillStyle = "#ffd93d";
+      ctx.fillStyle = shade("#ffd93d", 0.15);
       ctx.strokeStyle = "#e8a900";
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -1033,6 +993,9 @@ export class Game {
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
+      drawSphere(ctx, z.x, cy - 12, 3.2, "#ff6b6b");
+      drawSphere(ctx, z.x - cw / 4, cy - 3, 2.4, "#4d96ff");
+      drawSphere(ctx, z.x + cw / 4, cy - 3, 2.4, "#6bcb77");
     }
 
     // HP pips for multi-hit zombies that have taken damage (the boss has a
@@ -1084,28 +1047,16 @@ export class Game {
     const bob = Math.abs(p.vx) > 1 ? Math.sin(this.elapsed * 16) * 1.5 : 0;
     const recoil = this.recoil;
 
-    // Soft ground shadow.
-    ctx.fillStyle = theme.shadow;
-    ctx.beginPath();
-    ctx.ellipse(p.x, p.y + p.radius * 0.8, p.radius, p.radius * 0.42, 0, 0, Math.PI * 2);
-    ctx.fill();
+    drawContactShadow(ctx, p.x, p.y + p.radius * 0.8, p.radius, p.radius * 0.42, theme.shadow);
 
     ctx.save();
     ctx.translate(p.x, p.y + bob);
     ctx.rotate(lean);
 
-    // Blaster pointing up-range, with recoil.
-    ctx.strokeStyle = c.gun;
-    ctx.lineCap = "round";
-    ctx.lineWidth = 7;
-    ctx.beginPath();
-    ctx.moveTo(0, -p.radius * 0.2 + recoil);
-    ctx.lineTo(0, -p.radius - 12 + recoil);
-    ctx.stroke();
-    ctx.fillStyle = c.gunTip;
-    ctx.beginPath();
-    ctx.arc(0, -p.radius - 13 + recoil, 5, 0, Math.PI * 2);
-    ctx.fill();
+    // 3D blaster capsule pointing up-range, with recoil.
+    const tipY = -p.radius - 12 + recoil;
+    drawCapsule(ctx, 0, -p.radius * 0.2 + recoil, 0, tipY, 3.4, c.gun, shade(c.gun, -0.35));
+    drawSphere(ctx, 0, tipY - 1, 5, c.gunTip, shade(c.gunTip, -0.3));
 
     // Sparkly star burst when firing.
     if (this.muzzleFlash > 0) {
@@ -1119,31 +1070,15 @@ export class Game {
         ctx.lineTo(Math.cos(a) * 10, fy + Math.sin(a) * 10);
         ctx.stroke();
       }
-      ctx.fillStyle = c.flashCore;
-      ctx.beginPath();
-      ctx.arc(0, fy, 4, 0, Math.PI * 2);
-      ctx.fill();
+      drawSphere(ctx, 0, fy, 4, c.flashCore);
     }
 
     // Arms holding the blaster.
-    ctx.strokeStyle = c.arm;
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.moveTo(-p.radius * 0.55, 2);
-    ctx.lineTo(-2, -p.radius * 0.5 + recoil * 0.5);
-    ctx.moveTo(p.radius * 0.55, 2);
-    ctx.lineTo(2, -p.radius * 0.5 + recoil * 0.5);
-    ctx.stroke();
+    drawCapsule(ctx, -p.radius * 0.55, 2, -2, -p.radius * 0.5 + recoil * 0.5, 2.4, c.arm, shade(c.arm, -0.3));
+    drawCapsule(ctx, p.radius * 0.55, 2, 2, -p.radius * 0.5 + recoil * 0.5, 2.4, c.arm, shade(c.arm, -0.3));
 
-    // Shirt / vest with an outline.
-    ctx.fillStyle = c.shirt;
-    ctx.strokeStyle = c.shirtOutline;
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.ellipse(0, 2, p.radius * 0.95, p.radius * 0.8, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    // A star on the back.
+    // Shirt / vest as a shaded 3D ellipsoid with a star badge.
+    drawEllipsoid(ctx, 0, 2, p.radius * 0.95, p.radius * 0.8, c.shirt, c.shirtOutline);
     ctx.fillStyle = c.star;
     ctx.beginPath();
     for (let i = 0; i < 10; i++) {
@@ -1157,23 +1092,10 @@ export class Game {
     ctx.closePath();
     ctx.fill();
 
-    // Head with a cap (seen from behind — facing the horde).
-    ctx.fillStyle = c.skin;
-    ctx.beginPath();
-    ctx.arc(0, -p.radius * 0.35, p.radius * 0.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = c.cap;
-    ctx.strokeStyle = c.capOutline;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(0, -p.radius * 0.42, p.radius * 0.52, Math.PI * 0.95, Math.PI * 2.05);
-    ctx.fill();
-    ctx.stroke();
-    // Cap button.
-    ctx.fillStyle = c.button;
-    ctx.beginPath();
-    ctx.arc(0, -p.radius * 0.9, p.radius * 0.12, 0, Math.PI * 2);
-    ctx.fill();
+    // Head sphere with a shaded cap dome (seen from behind — facing the horde).
+    drawSphere(ctx, 0, -p.radius * 0.35, p.radius * 0.5, c.skin, shade(c.skin, -0.35));
+    drawEllipsoid(ctx, 0, -p.radius * 0.55, p.radius * 0.5, p.radius * 0.28, c.cap, c.capOutline);
+    drawSphere(ctx, 0, -p.radius * 0.9, p.radius * 0.12, c.button, shade(c.button, -0.3));
 
     ctx.restore();
   }
@@ -1198,50 +1120,18 @@ export class Game {
       ctx.arc(item.x, y, r * 2.4, 0, Math.PI * 2);
       ctx.fill();
 
+      drawContactShadow(ctx, item.x, y + r * 0.95, r * 0.9, r * 0.28, theme.shadow);
+
       if (drop === "heart") {
-        // Healing heart: two lobes and a point.
-        ctx.fillStyle = "#ff5d8a";
-        ctx.strokeStyle = "#d6336c";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(item.x, y + r * 0.85);
-        ctx.bezierCurveTo(item.x - r * 1.5, y - r * 0.4, item.x - r * 0.55, y - r * 1.15, item.x, y - r * 0.3);
-        ctx.bezierCurveTo(item.x + r * 0.55, y - r * 1.15, item.x + r * 1.5, y - r * 0.4, item.x, y + r * 0.85);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        // Shine.
-        ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
-        ctx.beginPath();
-        ctx.arc(item.x - r * 0.35, y - r * 0.35, r * 0.18, 0, Math.PI * 2);
-        ctx.fill();
+        drawHeart3d(ctx, item.x, y, r, "#ff5d8a", "#d6336c");
         continue;
       }
 
-      // Gift box with a ribbon.
-      ctx.fillStyle = theme.crateFill;
-      ctx.strokeStyle = accent;
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      ctx.roundRect(item.x - r, y - r, r * 2, r * 2, 5);
-      ctx.fill();
-      ctx.stroke();
-      ctx.strokeStyle = accent;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(item.x, y - r);
-      ctx.lineTo(item.x, y + r);
-      ctx.moveTo(item.x - r, y);
-      ctx.lineTo(item.x + r, y);
-      ctx.stroke();
-      // Bow on top.
-      ctx.fillStyle = accent;
-      ctx.beginPath();
-      ctx.arc(item.x - 3.5, y - r - 2, 3.2, 0, Math.PI * 2);
-      ctx.arc(item.x + 3.5, y - r - 2, 3.2, 0, Math.PI * 2);
-      ctx.fill();
+      // 3D gift box with ribbon and bow.
+      drawBox3d(ctx, item.x, y, r * 2, r * 2, r * 0.7, theme.crateFill, accent);
+      drawBow3d(ctx, item.x + r * 0.15, y - r - 2, 3.2, accent);
 
-      // Weapon initial.
+      // Weapon initial on the front face.
       ctx.fillStyle = accent;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -1270,19 +1160,12 @@ export class Game {
       ctx.moveTo(tx, ty);
       ctx.lineTo(b.x, b.y);
       ctx.stroke();
-      // Head with a bright halo and a contrasting outline ring so it stays
-      // visible over any background (bright sky or dark field alike).
+      // 3D bullet head with halo + outline so it stays visible on any field.
       ctx.fillStyle = `rgba(${style.trail}, 0.25)`;
       ctx.beginPath();
       ctx.arc(b.x, b.y, b.radius + 3.5, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = style.core;
-      ctx.strokeStyle = style.outline;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(b.x, b.y, b.radius + 0.5, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
+      drawSphere(ctx, b.x, b.y, b.radius + 0.5, style.core, style.outline);
     }
   }
 
